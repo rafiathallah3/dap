@@ -29,6 +29,7 @@ const (
 	GREATER
 	GREATER_EQUALS
 	RIGHT_ARROW
+	LEFT_ARROW
 
 	OR
 	AND
@@ -54,9 +55,12 @@ const (
 	PERCENT
 	POWER
 
+	PROGRAM
+	DICTIONARY
+	ALGORITHM
+	ENDPROGRAM
 	VAR
 	CONST
-	CLASS
 	NEW
 	IMPORT
 	FROM
@@ -78,40 +82,43 @@ const (
 	ENDWHILE
 	ENDFOR
 	ENDIF
-	EXPORT
-	TYPEOF
-	IN
+	INTEGER
+	REAL
+	STRINGTYPE
 )
 
 var reserved_lu map[string]TokenKind = map[string]TokenKind{
-	"var":      VAR,
-	"newline":  NEWLINE,
-	"const":    CONST,
-	"class":    CLASS,
-	"new":      NEW,
-	"import":   IMPORT,
-	"from":     FROM,
-	"function": FUNCTION,
-	"if":       IF,
-	"then":     THEN,
-	"elif":     ELIF,
-	"else":     ELSE,
-	"return":   RETURN,
-	"continue": CONTINUE,
-	"break":    BREAK,
-	"foreach":  FOREACH,
-	"while":    WHILE,
-	"for":      FOR,
-	"to":       TO,
-	"step":     STEP,
-	"do":       DO,
-	"end":      END,
-	"endwhile": ENDWHILE,
-	"endfor":   ENDFOR,
-	"endif":    ENDIF,
-	"export":   EXPORT,
-	"typeof":   TYPEOF,
-	"in":       IN,
+	"var":        VAR,
+	"newline":    NEWLINE,
+	"const":      CONST,
+	"program":    PROGRAM,
+	"endprogram": ENDPROGRAM,
+	"dictionary": DICTIONARY,
+	"algorithm":  ALGORITHM,
+	"new":        NEW,
+	"import":     IMPORT,
+	"from":       FROM,
+	"function":   FUNCTION,
+	"if":         IF,
+	"then":       THEN,
+	"elif":       ELIF,
+	"else":       ELSE,
+	"return":     RETURN,
+	"continue":   CONTINUE,
+	"break":      BREAK,
+	"foreach":    FOREACH,
+	"while":      WHILE,
+	"for":        FOR,
+	"to":         TO,
+	"step":       STEP,
+	"do":         DO,
+	"end":        END,
+	"endwhile":   ENDWHILE,
+	"endfor":     ENDFOR,
+	"endif":      ENDIF,
+	"integer":    INTEGER,
+	"real":       REAL,
+	"string":     STRINGTYPE,
 }
 
 type Token struct {
@@ -143,10 +150,6 @@ func (token Token) IsOneOfMany(expectedTokens ...TokenKind) bool {
 	}
 
 	return false
-}
-
-func (token Token) Matches(Value TokenKind) bool {
-	return token.Kind == Value
 }
 
 func (token Token) Debug() {
@@ -216,6 +219,8 @@ func TokenKindString(kind TokenKind) string {
 		return "GREATER_EQUALS"
 	case RIGHT_ARROW:
 		return "RIGHT_ARROW"
+	case LEFT_ARROW:
+		return "LEFT_ARROW"
 	case OR:
 		return "OR"
 	case AND:
@@ -258,8 +263,14 @@ func TokenKindString(kind TokenKind) string {
 		return "VAR"
 	case CONST:
 		return "CONST"
-	case CLASS:
-		return "CLASS"
+	case PROGRAM:
+		return "PROGRAM"
+	case DICTIONARY:
+		return "DICTIONARY"
+	case ALGORITHM:
+		return "ALGORITHM"
+	case ENDPROGRAM:
+		return "ENDPROGRAM"
 	case NEW:
 		return "NEW"
 	case IMPORT:
@@ -302,12 +313,12 @@ func TokenKindString(kind TokenKind) string {
 		return "ENDFOR"
 	case END:
 		return "END"
-	case EXPORT:
-		return "EXPORT"
-	case TYPEOF:
-		return "TYPEOF"
-	case IN:
-		return "IN"
+	case INTEGER:
+		return "INTEGER"
+	case REAL:
+		return "REAL"
+	case STRINGTYPE:
+		return "STRING TYPE"
 	default:
 		return "UNKNOWN"
 	}

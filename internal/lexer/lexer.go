@@ -41,8 +41,12 @@ func (lex *lexer) at_eof() bool {
 	return lex.Pos.Idx >= len(lex.Source)
 }
 
-func Tokenize(source string) []Token {
-	lex := createLexer(source, "<stdin>")
+func Tokenize(source string, fileName string) []Token {
+	if fileName == "" {
+		fileName = "<stdin>"
+	}
+
+	lex := createLexer(source, fileName)
 
 	for !lex.at_eof() {
 		matched := false
@@ -110,13 +114,14 @@ func createLexer(source string, fn string) *lexer {
 			{regexp.MustCompile(`\)`), defaultHandler(CLOSE_PAREN, ")")},
 			{regexp.MustCompile(`==`), defaultHandler(EQUALS, "==")},
 			{regexp.MustCompile(`!=`), defaultHandler(NOT_EQUALS, "!=")},
+			{regexp.MustCompile(`->`), defaultHandler(RIGHT_ARROW, "->")},
+			{regexp.MustCompile(`<-`), defaultHandler(LEFT_ARROW, "<-")},
 			{regexp.MustCompile(`=`), defaultHandler(ASSIGNMENT, "=")},
 			{regexp.MustCompile(`!`), defaultHandler(NOT, "!")},
 			{regexp.MustCompile(`<=`), defaultHandler(LESS_EQUALS, "<=")},
 			{regexp.MustCompile(`<`), defaultHandler(LESS, "<")},
 			{regexp.MustCompile(`>=`), defaultHandler(GREATER_EQUALS, ">=")},
 			{regexp.MustCompile(`>`), defaultHandler(GREATER, ">")},
-			{regexp.MustCompile(`->`), defaultHandler(RIGHT_ARROW, "->")},
 			{regexp.MustCompile(`\|\|`), defaultHandler(OR, "||")},
 			{regexp.MustCompile(`&&`), defaultHandler(AND, "&&")},
 			{regexp.MustCompile(`\.\.`), defaultHandler(DOT_DOT, "..")},

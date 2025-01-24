@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -19,7 +20,7 @@ func (symbolTable *SymbolTable) Get(name string) Value {
 	}
 
 	if symbolTable.Parent != nil {
-		return symbolTable.Get(name)
+		return symbolTable.Parent.Get(name)
 	}
 
 	return Null{}
@@ -72,12 +73,15 @@ func PrintValueInterpreter(n Value) string {
 type Value interface {
 	Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Value
 	Set_context(context *Context) Value
+	Get_context() *Context
 	Is_true() bool
 	Copy() Value
 	Print() string
 }
 
-type Null struct{}
+type Null struct {
+	Context *Context
+}
 
 func (n Null) Print() string {
 	return "NULL"
@@ -87,6 +91,9 @@ func (n Null) Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Value 
 }
 func (n Null) Set_context(context *Context) Value {
 	return n
+}
+func (n Null) Get_context() *Context {
+	return n.Context
 }
 func (n Null) Copy() Value {
 	copy := Null{}
@@ -116,6 +123,10 @@ func (n List) Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Value 
 func (n List) Set_context(context *Context) Value {
 	n.Context = context
 	return n
+}
+
+func (n List) Get_context() *Context {
+	return n.Context
 }
 
 func (n List) Copy() Value {
@@ -198,6 +209,10 @@ func (n String) Set_context(context *Context) Value {
 	return n
 }
 
+func (n String) Get_context() *Context {
+	return n.Context
+}
+
 func (n String) Copy() Value {
 	copy := String{}
 	copy.Value = n.Value
@@ -248,6 +263,10 @@ func (n Number) Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Valu
 func (n Number) Set_context(context *Context) Value {
 	n.Context = context
 	return n
+}
+
+func (n Number) Get_context() *Context {
+	return n.Context
 }
 
 func (n Number) Copy() Value {
@@ -425,6 +444,9 @@ func (n BaseFunction) Set_context(context *Context) Value {
 	n.Context = context
 	return n
 }
+func (n BaseFunction) Get_context() *Context {
+	return n.Context
+}
 func (n BaseFunction) Copy() Value {
 	copy := BaseFunction{}
 	copy.Name = n.Name
@@ -470,7 +492,16 @@ func (n BaseFunction) CheckArgs(ArgNames []string, args []Value) Value {
 	res := &RTResult{}
 
 	if len(args) > len(ArgNames) {
-		return res.Failure(RTError(*n.Pos_Start, *n.Pos_End, fmt.Sprintf("%d too many args passed into '%s'", len(args)-len(ArgNames), n.Name), n.Context))
+		adaSpread := false
+		for i, v := range ArgNames {
+			if i == len(ArgNames)-1 && v[:3] == "..." {
+				adaSpread = true
+			}
+		}
+
+		if !adaSpread {
+			return res.Failure(RTError(*n.Pos_Start, *n.Pos_End, fmt.Sprintf("%d too many args passed into '%s'", len(args)-len(ArgNames), n.Name), n.Context))
+		}
 	}
 
 	if len(args) < len(ArgNames) {
@@ -481,7 +512,21 @@ func (n BaseFunction) CheckArgs(ArgNames []string, args []Value) Value {
 }
 
 func (n BaseFunction) PopulateArgs(ArgNames []string, args []Value, exec_ctx *Context) {
-	for i := 0; i < len(args); i++ {
+	for i := 0; i < len(ArgNames); i++ {
+		if i == len(ArgNames)-1 && ArgNames[i][:3] == "..." {
+			v := strings.ReplaceAll(ArgNames[i], "...", "")
+
+			args[i].Set_context(exec_ctx)
+			exec_ctx.Symbol_Table.Set(v, List{
+				Elements:  args[i:],
+				Context:   exec_ctx,
+				Pos_Start: n.Pos_Start,
+				Pos_End:   n.Pos_End,
+			})
+
+			continue
+		}
+
 		arg_name := ArgNames[i]
 		arg_value := args[i]
 
@@ -518,6 +563,9 @@ func (n Function) Set_context(context *Context) Value {
 	n.Context = context
 	return n
 }
+func (n Function) Get_context() *Context {
+	return n.Context
+}
 func (n Function) Copy() Value {
 	copy := Function{}
 	copy.ArgNames = n.ArgNames
@@ -549,6 +597,9 @@ func (n BuiltInFunction) Set_context(context *Context) Value {
 	n.Context = context
 	return n
 }
+func (n BuiltInFunction) Get_context() *Context {
+	return n.Context
+}
 func (n BuiltInFunction) Copy() Value {
 	copy := BuiltInFunction{}
 	copy.Name = n.Name
@@ -562,7 +613,7 @@ func (n BuiltInFunction) Is_true() bool {
 	return true
 }
 
-func (n BuiltInFunction) Execute(args []Value) Value {
+func (n BuiltInFunction) Execute(args []Value, rawArgs []Expr) Value {
 	res := &RTResult{}
 	execCtx := n.GenerateNewContext()
 
@@ -590,25 +641,33 @@ func (n BuiltInFunction) Execute(args []Value) Value {
 		return res
 	}
 
-	methodCall := results[1].Call([]reflect.Value{reflect.ValueOf(&execCtx)})
+	methodCall := results[1].Call([]reflect.Value{reflect.ValueOf(&execCtx), reflect.ValueOf(rawArgs)})
 	hasil := res.Register(methodCall[0].Interface().(Value))
 	if res.ShouldReturn() {
 		return res
 	}
 
+	if hasil.Get_context() != nil {
+		n.Context = hasil.Get_context()
+	}
 	return res.Success(hasil)
 }
 
-func (n BuiltInFunction) ExecutePrint() ([]string, func(*Context) Value) {
-	return []string{"value"}, func(ctx *Context) Value {
+func (n BuiltInFunction) ExecutePrint() ([]string, func(*Context, []Expr) Value) {
+	return []string{"...value"}, func(ctx *Context, rawArgs []Expr) Value {
 		res := &RTResult{}
-		fmt.Printf("%v\n", PrintValueInterpreter(ctx.Symbol_Table.Get("value")))
+
+		for _, v := range ctx.Symbol_Table.Get("value").(List).Elements {
+			fmt.Printf("%v\n", PrintValueInterpreter(v))
+		}
+
+		// fmt.Printf("%v\n", PrintValueInterpreter(ctx.Symbol_Table.Get("value")))
 		return res.Success(Null{})
 	}
 }
 
-func (n BuiltInFunction) ExecutePrintRet() ([]string, func(*Context) Value) {
-	return []string{"value"}, func(ctx *Context) Value {
+func (n BuiltInFunction) ExecutePrintRet() ([]string, func(*Context, []Expr) Value) {
+	return []string{"value"}, func(ctx *Context, rawArgs []Expr) Value {
 		res := &RTResult{}
 		return res.Success(String{
 			Value: fmt.Sprintf("%v", PrintValueInterpreter(ctx.Symbol_Table.Get("value"))),
@@ -616,22 +675,42 @@ func (n BuiltInFunction) ExecutePrintRet() ([]string, func(*Context) Value) {
 	}
 }
 
-func (n BuiltInFunction) ExecuteInput() ([]string, func(*Context) Value) {
-	return []string{}, func(ctx *Context) Value {
+func (n BuiltInFunction) ExecuteInput() ([]string, func(*Context, []Expr) Value) {
+	return []string{"...value"}, func(ctx *Context, rawArgs []Expr) Value {
 		res := &RTResult{}
 
 		//Need to improve this 20/01/2024 [23:41]
-		var s string
-		fmt.Scan(&s)
+		// Gonna improve it 24/01/2024 [14:07]
+		// var s string
+		// fmt.Scan(&s)
 
-		return res.Success(String{
-			Value: s,
-		})
+		// return res.Success(String{
+		// 	Value: s,
+		// })
+
+		for i := 0; i < len(ctx.Symbol_Table.Get("value").(List).Elements); i++ {
+			switch rawArgs := rawArgs[i].(type) {
+			case VarAccessNode:
+				var s string
+				fmt.Scan(&s)
+
+				if parseFloat, err := strconv.ParseFloat(s, 64); err == nil {
+					ctx.Symbol_Table.Set(rawArgs.VarNameTok.Value, Number{Value: parseFloat, Context: ctx})
+					continue
+				}
+
+				ctx.Symbol_Table.Set(rawArgs.VarNameTok.Value, String{Value: s})
+			default:
+				return res.Failure(RTError(*n.Pos_Start, *n.Pos_End, "Parameter must be a Variable access node", ctx))
+			}
+		}
+
+		return res.Success(Null{Context: ctx})
 	}
 }
 
-func (n BuiltInFunction) ExecuteIsNumber() ([]string, func(*Context) Value) {
-	return []string{"value"}, func(ctx *Context) Value {
+func (n BuiltInFunction) ExecuteIsNumber() ([]string, func(*Context, []Expr) Value) {
+	return []string{"value"}, func(ctx *Context, rawArgs []Expr) Value {
 		res := &RTResult{}
 		_, apakahNumber := ctx.Symbol_Table.Get("value").(Number)
 		if apakahNumber {
@@ -641,8 +720,8 @@ func (n BuiltInFunction) ExecuteIsNumber() ([]string, func(*Context) Value) {
 	}
 }
 
-func (n BuiltInFunction) ExecuteIsString() ([]string, func(*Context) Value) {
-	return []string{"value"}, func(ctx *Context) Value {
+func (n BuiltInFunction) ExecuteIsString() ([]string, func(*Context, []Expr) Value) {
+	return []string{"value"}, func(ctx *Context, rawArgs []Expr) Value {
 		res := &RTResult{}
 		_, apakahString := ctx.Symbol_Table.Get("value").(String)
 		if apakahString {
@@ -652,8 +731,8 @@ func (n BuiltInFunction) ExecuteIsString() ([]string, func(*Context) Value) {
 	}
 }
 
-func (n BuiltInFunction) ExecuteAppend() ([]string, func(*Context) Value) {
-	return []string{"list", "value"}, func(ctx *Context) Value {
+func (n BuiltInFunction) ExecuteAppend() ([]string, func(*Context, []Expr) Value) {
+	return []string{"list", "value"}, func(ctx *Context, rawArgs []Expr) Value {
 		res := &RTResult{}
 
 		list, apakahList := ctx.Symbol_Table.Get("list").(List)
@@ -694,6 +773,9 @@ func (n *RTResult) Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) V
 }
 func (n *RTResult) Set_context(context *Context) Value {
 	return n
+}
+func (n RTResult) Get_context() *Context {
+	return nil
 }
 func (n *RTResult) Copy() Value {
 	return n

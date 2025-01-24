@@ -420,3 +420,23 @@ func (n BreakNode) GetPosStart() *tools.Position {
 func (n BreakNode) GetPosEnd() *tools.Position {
 	return n.Pos_end
 }
+
+type DictionaryNode struct {
+	VariableDiBuat []Expr
+	Pos_Start      *tools.Position
+	Pos_end        *tools.Position
+}
+
+func (n DictionaryNode) expr() {}
+func (n DictionaryNode) Print() string {
+	return PrintValueAST(n)
+}
+func (n DictionaryNode) Name() string {
+	return "DictionaryNode"
+}
+func (n DictionaryNode) GetPosStart() *tools.Position {
+	return n.VariableDiBuat[0].GetPosStart()
+}
+func (n DictionaryNode) GetPosEnd() *tools.Position {
+	return n.VariableDiBuat[len(n.VariableDiBuat)-1].GetPosEnd()
+}

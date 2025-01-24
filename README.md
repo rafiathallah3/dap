@@ -1,6 +1,6 @@
 # DAP
 
-A friendly pseudocode that I implemented, inspired by my university professor, Mr. Jimmy. To prove that I can be like him.
+A friendly pseudocode that I implemented, inspired by my university professor, Mr. Jimmy. To prove that I can be like him. One day.
 
 Example code:
 

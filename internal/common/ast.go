@@ -38,6 +38,7 @@ func (n Token) GetPosEnd() *tools.Position {
 type ParseResult struct {
 	Error                      *Error
 	Node                       Expr
+	ProgramName                string
 	ToReverseCount             int
 	AdvanceCount               int
 	LastRegisteredAdvanceCount int
@@ -78,6 +79,7 @@ func (parseResult *ParseResult) Try_register(res interface{}) Expr {
 	case *ParseResult:
 		if res.Error != nil {
 			parseResult.ToReverseCount = res.AdvanceCount
+			// parseResult.Error = res.Error [THIS SINGLE LINE OF CODE MADE ME STUCK FOR 2 HOURS FINDING THE BUG!!! 24/01/2025 00:11]
 			return nil
 		}
 
@@ -86,17 +88,17 @@ func (parseResult *ParseResult) Try_register(res interface{}) Expr {
 	return parseResult.Register(res)
 }
 
-func (parserResult *ParseResult) Success(node Expr) Expr {
-	parserResult.Node = node
-	return parserResult
+func (parseResult *ParseResult) Success(node Expr) Expr {
+	parseResult.Node = node
+	return parseResult
 }
 
-func (parserResult *ParseResult) Failure(error *Error) Expr {
-	if parserResult.Error == nil || parserResult.AdvanceCount == 0 {
-		parserResult.Error = error
+func (parseResult *ParseResult) Failure(error *Error) Expr {
+	if parseResult.Error == nil || parseResult.AdvanceCount == 0 {
+		parseResult.Error = error
 	}
 
-	return parserResult
+	return parseResult
 }
 
 func (parseResult *ParseResult) expr() {}

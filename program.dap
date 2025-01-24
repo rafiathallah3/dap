@@ -1,27 +1,6 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-var i = 0
-while i < 10 do
-    if i >= 5 then
-        break
-    endif
-    var i = i + 1
-endwhile
-
-print(i)
+program HowManyAreYou
+dictionary
+    n, diTarget, total : integer
+algorithm
+    print "[24/01/2025 16:29]"
+endprogram

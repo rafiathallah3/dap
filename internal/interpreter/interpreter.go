@@ -58,6 +58,20 @@ func (i *Interpreter) VisitStringNode(node common.Expr, context *common.Context)
 	return res.Success(common.String{Value: nodeToken.Value[1 : len(nodeToken.Value)-1], Context: context}.Set_pos(nodeToken.Pos_Start, nodeToken.Pos_End))
 }
 
+func (i *Interpreter) VisitDictionaryNode(node common.Expr, context *common.Context) common.Value {
+	res := &common.RTResult{}
+	nodeDictionary := node.(common.DictionaryNode)
+
+	for _, v := range nodeDictionary.VariableDiBuat {
+		res.Register(i.Visit(v, context))
+		if res.ShouldReturn() {
+			return res
+		}
+	}
+
+	return res.Success(common.Null{})
+}
+
 func (i *Interpreter) VisitListNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
 	nodeList := node.(common.ListNode)
@@ -236,8 +250,9 @@ func (i *Interpreter) VisitIfNode(node common.Expr, context *common.Context) com
 		}
 	}
 
-	if nodeIf.Else_case != nil {
-		else_value := res.Register(i.Visit(*nodeIf.Else_case, context))
+	if nodeIf.Else_case.Isi != nil {
+		isi := nodeIf.Else_case.Isi
+		else_value := res.Register(i.Visit(isi, context))
 		if res.ShouldReturn() {
 			return res
 		}
@@ -406,6 +421,7 @@ func (i *Interpreter) VisitFuncNode(node common.Expr, context *common.Context) c
 func (i *Interpreter) VisitCallNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
 	args := make([]common.Value, 0)
+	rawArgs := make([]common.Expr, 0)
 	nodeCall := node.(common.CallNode)
 
 	value_to_call := res.Register(i.Visit(nodeCall.NodeToCall, context))
@@ -415,6 +431,7 @@ func (i *Interpreter) VisitCallNode(node common.Expr, context *common.Context) c
 	value_to_call = value_to_call.Copy().Set_pos(nodeCall.Pos_Start, nodeCall.Pos_end)
 
 	for _, argNode := range nodeCall.ArgNodes {
+		rawArgs = append(rawArgs, argNode)
 		args = append(args, res.Register(i.Visit(argNode, context)))
 		if res.ShouldReturn() {
 			return res
@@ -424,7 +441,15 @@ func (i *Interpreter) VisitCallNode(node common.Expr, context *common.Context) c
 	var returnValue common.Value
 	switch value_to_call := value_to_call.(type) {
 	case common.BuiltInFunction:
-		returnValue = res.Register(value_to_call.Execute(args))
+		returnValue = res.Register(value_to_call.Execute(args, rawArgs))
+		if returnValueContext := returnValue.Get_context(); returnValueContext != nil {
+			for _, v := range rawArgs {
+				switch v := v.(type) {
+				case common.VarAccessNode:
+					context.Symbol_Table.Set(v.VarNameTok.Value, returnValueContext.Symbol_Table.Get(v.VarNameTok.Value))
+				}
+			}
+		}
 	default: //Normal Function
 		returnValue = res.Register(i.Execute(value_to_call, context, args))
 	}
