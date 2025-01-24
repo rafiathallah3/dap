@@ -29,10 +29,6 @@ func (lex *lexer) push(token Token) {
 	lex.Tokens = append(lex.Tokens, token)
 }
 
-// func (lex *lexer) at() byte {
-// 	return lex.Source[lex.Pos]
-// }
-
 func (lex *lexer) remainder() string {
 	return lex.Source[lex.Pos.Idx:]
 }
@@ -67,10 +63,6 @@ func Tokenize(source string, fileName string) []Token {
 				}
 			}
 		}
-
-		// if apakahAdaNewLine {
-		// 	lex.push(NewToken(NEWLINE, "\n", lex.Pos, nil))
-		// }
 
 		if !matched {
 			panic(fmt.Sprintf("Lexer::Error -> Unrecognized token near %s\n", lex.remainder()))

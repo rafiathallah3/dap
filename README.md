@@ -18,3 +18,6 @@ algorithm
     print n
 endprogram
 ```
+
+<hr/>
+Bug that I can't fix is if you add space at the end of the word before the newline, the newline token would be ignored. The cause might be the Regular Expression in the lexer.go
