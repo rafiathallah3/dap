@@ -2,5 +2,18 @@ program HowManyAreYou
 dictionary
     n, diTarget, total : integer
 algorithm
-    print "[24/01/2025 16:33]"
+    print "[24/01/2025 20:14]"
+
+    i <- 1
+    while i < 10 do
+        i <- i + 1
+    endwhile
+    print i
+
+    i <- 1
+    repeat
+        i <- i + 1
+    until i > 10
+
+    print i
 endprogram

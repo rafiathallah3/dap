@@ -62,8 +62,8 @@ const (
 	VAR
 	CONST
 	NEW
-	IMPORT
-	FROM
+	REPEAT
+	UNTIL
 	FUNCTION
 	IF
 	THEN
@@ -96,8 +96,8 @@ var reserved_lu map[string]TokenKind = map[string]TokenKind{
 	"dictionary": DICTIONARY,
 	"algorithm":  ALGORITHM,
 	"new":        NEW,
-	"import":     IMPORT,
-	"from":       FROM,
+	"repeat":     REPEAT,
+	"until":      UNTIL,
 	"function":   FUNCTION,
 	"if":         IF,
 	"then":       THEN,
@@ -273,10 +273,10 @@ func TokenKindString(kind TokenKind) string {
 		return "ENDPROGRAM"
 	case NEW:
 		return "NEW"
-	case IMPORT:
-		return "IMPORT"
-	case FROM:
-		return "FROM"
+	case UNTIL:
+		return "UNTIL"
+	case REPEAT:
+		return "REPEAT"
 	case FUNCTION:
 		return "FUNCTION"
 	case IF:

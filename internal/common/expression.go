@@ -41,6 +41,8 @@ func PrintValueAST(n Expr) string {
 		return fmt.Sprintf("FOR %s TO %s STEP %s DO %s", PrintValueAST(n.StartValueNode), PrintValueAST(n.EndValueNode), PrintValueAST(n.StepValueNode), PrintValueAST(n.BodyNode))
 	case WhileNode:
 		return fmt.Sprintf("WHIEL %s DO %s", PrintValueAST(n.KondisiNode), PrintValueAST(n.BodyNode))
+	case RepeatNode:
+		return fmt.Sprintf("REPEAT %s UNTIL %s", PrintValueAST(n.BodyNode), PrintValueAST(n.KondisiNode))
 	case *ParseResult:
 		return PrintValueAST(n.Node)
 	}
@@ -304,6 +306,28 @@ func (n WhileNode) GetPosStart() *tools.Position {
 	return n.Pos_Start
 }
 func (n WhileNode) GetPosEnd() *tools.Position {
+	return n.Pos_end
+}
+
+type RepeatNode struct {
+	KondisiNode      Expr
+	BodyNode         Expr
+	ShouldReturnNull bool
+	Pos_Start        *tools.Position
+	Pos_end          *tools.Position
+}
+
+func (n RepeatNode) expr() {}
+func (n RepeatNode) Print() string {
+	return PrintValueAST(n)
+}
+func (n RepeatNode) Name() string {
+	return "RepeatNode"
+}
+func (n RepeatNode) GetPosStart() *tools.Position {
+	return n.Pos_Start
+}
+func (n RepeatNode) GetPosEnd() *tools.Position {
 	return n.Pos_end
 }
 

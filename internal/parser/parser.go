@@ -580,6 +580,76 @@ func (p *parser) while_expr() common.Expr {
 	})
 }
 
+func (p *parser) repeat_expr() common.Expr {
+	res := &common.ParseResult{}
+
+	if p.currentToken().Kind != lexer.REPEAT {
+		errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, "Expected 'repeat'")
+		return res.Failure(&errorNya)
+	}
+	pos_start := p.currentToken().Pos_Start.Copy()
+
+	res.Register_Advancement()
+	p.advance()
+
+	if p.currentToken().Kind == lexer.NEWLINE {
+		res.Register_Advancement()
+		p.advance()
+
+		body := res.Register(p.statements())
+		if res.Error != nil {
+			return res
+		}
+
+		if p.currentToken().Kind != lexer.UNTIL {
+			errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected 'until'")
+			return res.Failure(&errorNya)
+		}
+
+		res.Register_Advancement()
+		p.advance()
+
+		kondisi := res.Register(p.expr())
+		if res.Error != nil {
+			return res
+		}
+
+		return res.Success(common.RepeatNode{
+			KondisiNode:      kondisi,
+			BodyNode:         body,
+			ShouldReturnNull: true,
+			Pos_Start:        pos_start,
+			Pos_end:          kondisi.GetPosEnd(),
+		})
+	}
+
+	IsiNode := res.Register(p.statement())
+	if res.Error != nil {
+		return res
+	}
+
+	if p.currentToken().Kind != lexer.END && p.currentToken().Kind != lexer.UNTIL {
+		errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected 'until'")
+		return res.Failure(&errorNya)
+	}
+
+	res.Register_Advancement()
+	p.advance()
+
+	kondisi := res.Register(p.expr())
+	if res.Error != nil {
+		return res
+	}
+
+	return res.Success(common.WhileNode{
+		KondisiNode:      kondisi,
+		BodyNode:         IsiNode,
+		ShouldReturnNull: false,
+		Pos_Start:        kondisi.GetPosStart(),
+		Pos_end:          IsiNode.GetPosEnd(),
+	})
+}
+
 func (p *parser) function_def() common.Expr {
 	res := &common.ParseResult{}
 
@@ -774,6 +844,13 @@ func (p *parser) atom() common.Expr {
 		}
 
 		return res.Success(while_expr)
+	case lexer.REPEAT:
+		repeat_expr := res.Register(p.repeat_expr())
+		if res.Error != nil {
+			return res
+		}
+
+		return res.Success(repeat_expr)
 	case lexer.FUNCTION:
 		function_def := res.Register(p.function_def())
 		if res.Error != nil {
@@ -1084,7 +1161,7 @@ func (p *parser) expr() common.Expr {
 }
 
 func (p *parser) bin_op(fungsi_a func() common.Expr, ops []lexer.TokenKind, fungsi_b func() common.Expr) common.Expr {
-	res := &common.ParseResult{Error: nil, Node: common.NullNode{}}
+	res := &common.ParseResult{}
 	left := res.Register(fungsi_a())
 
 	if res.Error != nil {

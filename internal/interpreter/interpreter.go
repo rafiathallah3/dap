@@ -382,6 +382,49 @@ func (i *Interpreter) VisitWhileNode(node common.Expr, context *common.Context) 
 	return res.Success(ListValue)
 }
 
+func (i *Interpreter) VisitRepeatNode(node common.Expr, context *common.Context) common.Value {
+	res := &common.RTResult{}
+	nodeWhile := node.(common.RepeatNode)
+	elements := make([]common.Value, 0)
+
+	for {
+		value := res.Register(i.Visit(nodeWhile.BodyNode, context))
+		if res.ShouldReturn() && !res.LoopShouldContinue && !res.LoopShouldBreak {
+			return res
+		}
+
+		if res.LoopShouldContinue {
+			continue
+		}
+
+		if res.LoopShouldBreak {
+			break
+		}
+
+		kondisi := res.Register(i.Visit(nodeWhile.KondisiNode, context))
+		if res.ShouldReturn() {
+			return res
+		}
+
+		if kondisi.Is_true() {
+			break
+		}
+
+		elements = append(elements, value)
+	}
+
+	if nodeWhile.ShouldReturnNull {
+		return res.Success(common.Null{})
+	}
+
+	ListValue := common.List{
+		Elements: elements,
+	}
+	ListValue.Set_pos(nodeWhile.Pos_Start, nodeWhile.Pos_end)
+	ListValue.Set_context(context)
+	return res.Success(ListValue)
+}
+
 func (i *Interpreter) VisitFuncNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
 	nodeFunc := node.(common.FuncNode)
