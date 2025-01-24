@@ -20,4 +20,4 @@ endprogram
 ```
 
 <hr/>
-Bug that I can't fix is if you add space at the end of the word before the newline, the newline token would be ignored. The cause might be the Regular Expression in the lexer.go
+The bug I can't fix occurs when you add a space at the end of a word before a newline; the newline token is ignored. The cause might be the regular expression in lexer.go
