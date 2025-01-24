@@ -5,13 +5,16 @@ A friendly pseudocode that I implemented, inspired by my university professor, M
 Example code:
 
 ```javascript
-var i = 0
-while i < 10 do
-    if i >= 5 then
-        break
-    endif
-    var i = i + 1
-endwhile
+program ThisIsAProgram
+dictionary
+    n : integer
+algorithm
+    n <- 1
 
-print(i)
+    for i = 1 to 10 do
+        n <- n * i
+    endfor
+
+    print n
+endprogram
 ```
