@@ -3,6 +3,7 @@ package interpreter
 import (
 	"dap/internal/common"
 	"dap/internal/lexer"
+	"dap/tools"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -113,14 +114,18 @@ func (i *Interpreter) VisitVarAssignNode(node common.Expr, context *common.Conte
 	res := &common.RTResult{}
 	nodeVarAssignNode := node.(common.VarAssignNode)
 
-	var_name := nodeVarAssignNode.VarName.Value
+	// var_name := nodeVarAssignNode.VarName.Value
 	value := res.Register(i.Visit(nodeVarAssignNode.ValueNode, context))
 
 	if res.ShouldReturn() {
 		return res
 	}
 
-	context.Symbol_Table.Set(var_name, value)
+	res.Register(i.GantiVariable(nodeVarAssignNode.VarName.Value, value, context, nodeVarAssignNode.ApakahConst, nodeVarAssignNode.Pos_Start.Copy(), nodeVarAssignNode.Pos_end.Copy()))
+	if res.Error != nil {
+		return res
+	}
+	// context.Symbol_Table.Set(var_name, value)
 
 	return res.Success(value)
 }
@@ -307,7 +312,13 @@ func (i *Interpreter) VisitForNode(node common.Expr, context *common.Context) co
 	}
 
 	for kondisi(iteration, int(endValue.Value)) {
-		context.Symbol_Table.Set(nodeFor.VarNameTok.Value, common.Number{Value: float64(iteration)})
+		res.Register(i.GantiVariable(nodeFor.VarNameTok.Value, common.Number{Value: float64(iteration)}, context, false, nodeFor.VarNameTok.Pos_Start.Copy(), nodeFor.VarNameTok.Pos_End.Copy()))
+		if res.Error != nil {
+			return res
+		}
+
+		// context.Symbol_Table.Set(nodeFor.VarNameTok.Value, common.Number{Value: float64(iteration)})
+
 		iteration += int(stepValue.Value)
 
 		value := res.Register(i.Visit(nodeFor.BodyNode, context))
@@ -428,10 +439,14 @@ func (i *Interpreter) VisitRepeatNode(node common.Expr, context *common.Context)
 func (i *Interpreter) VisitFuncNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
 	nodeFunc := node.(common.FuncNode)
+	var PosStart *tools.Position
+	var PosEnd *tools.Position
 
 	funcName := "anonymous"
 	if nodeFunc.VarNameTok != nil {
 		funcName = nodeFunc.VarNameTok.Value
+		PosStart = nodeFunc.VarNameTok.Pos_Start.Copy()
+		PosEnd = nodeFunc.VarNameTok.Pos_End.Copy()
 	}
 
 	argNames := make([]string, 0)
@@ -451,7 +466,11 @@ func (i *Interpreter) VisitFuncNode(node common.Expr, context *common.Context) c
 	}
 
 	if nodeFunc.VarNameTok != nil {
-		context.Symbol_Table.Set(funcName, funcValue)
+		res.Register(i.GantiVariable(funcName, funcValue, context, false, PosStart, PosEnd))
+		if res.Error != nil {
+			return res
+		}
+		// context.Symbol_Table.Set(funcName, funcValue)
 	}
 
 	if nodeFunc.ShouldAutoReturn {
@@ -489,7 +508,11 @@ func (i *Interpreter) VisitCallNode(node common.Expr, context *common.Context) c
 			for _, v := range rawArgs {
 				switch v := v.(type) {
 				case common.VarAccessNode:
-					context.Symbol_Table.Set(v.VarNameTok.Value, returnValueContext.Symbol_Table.Get(v.VarNameTok.Value))
+					res.Register(i.GantiVariable(v.VarNameTok.Value, returnValueContext.Symbol_Table.Get(v.VarNameTok.Value), context, false, nil, nil))
+					if res.Error != nil {
+						return res
+					}
+					// context.Symbol_Table.Set(v.VarNameTok.Value, returnValueContext.Symbol_Table.Get(v.VarNameTok.Value))
 				}
 			}
 		}
@@ -555,4 +578,26 @@ func (i *Interpreter) Execute(node common.Value, context *common.Context, args [
 	}
 
 	return res.Success(res.FuncReturnValue)
+}
+
+func (i *Interpreter) GantiVariable(varName string, value common.Value, context *common.Context, apakahKonst bool, posStart *tools.Position, posend *tools.Position) common.Value {
+	res := &common.RTResult{}
+	apakahAdaKonst := context.Symbol_Table.Get("ApakahKonstant " + varName)
+
+	if apakahAdaKonst == nil {
+		hasil := 0.0
+		if apakahKonst {
+			hasil = 1.0
+		}
+
+		context.Symbol_Table.Set("ApakahKonstant "+varName, common.Number{Value: hasil})
+	}
+
+	if apakahAdaKonst != nil && apakahAdaKonst.(common.Number).Value == 1 {
+		return res.Failure(common.RTError(*posStart, *posend, fmt.Sprintf("Constant variable '%s' can not be assigned!", varName), context))
+	}
+
+	context.Symbol_Table.Set(varName, value)
+
+	return res.Success(common.Null{})
 }

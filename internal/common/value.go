@@ -23,7 +23,7 @@ func (symbolTable *SymbolTable) Get(name string) Value {
 		return symbolTable.Parent.Get(name)
 	}
 
-	return Null{}
+	return nil
 }
 
 func (symbolTable *SymbolTable) Set(name string, value Value) {

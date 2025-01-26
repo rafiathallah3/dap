@@ -174,10 +174,11 @@ func (n UnaryOpNode) GetPosEnd() *tools.Position {
 }
 
 type VarAssignNode struct {
-	VarName   lexer.Token
-	ValueNode Expr
-	Pos_Start *tools.Position
-	Pos_end   *tools.Position
+	VarName     lexer.Token
+	ValueNode   Expr
+	ApakahConst bool
+	Pos_Start   *tools.Position
+	Pos_end     *tools.Position
 }
 
 func (n VarAssignNode) expr() {}

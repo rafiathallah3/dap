@@ -127,47 +127,80 @@ func (p *parser) dictionary_expr() common.Expr {
 				res.Register_Advancement()
 				p.advance()
 			}
+
+			if p.currentToken().Kind != lexer.COLON {
+				errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, fmt.Sprintf("Expected ':', got %s", p.currentToken().Value))
+				return res.Failure(&errorNya)
+			}
+
+			res.Register_Advancement()
+			p.advance()
+
+			tipeData := p.currentToken().Kind
+			switch tipeData {
+			case lexer.INTEGER, lexer.REAL:
+				for _, val := range ListVarNameToks {
+					IsiNode = append(IsiNode, common.VarAssignNode{
+						VarName: val,
+						ValueNode: common.NumberNode{
+							Token: lexer.NewToken(lexer.NUMBER, "0", nil, nil),
+						},
+						Pos_Start: val.Pos_Start,
+						Pos_end:   val.Pos_End,
+					})
+				}
+			case lexer.STRINGTYPE:
+				for _, val := range ListVarNameToks {
+					IsiNode = append(IsiNode, common.VarAssignNode{
+						VarName: val,
+						ValueNode: common.StringNode{
+							Token: lexer.NewToken(lexer.NUMBER, "\"\"", nil, nil),
+						},
+						Pos_Start: val.Pos_Start,
+						Pos_end:   val.Pos_End,
+					})
+				}
+			}
+
+			res.Register_Advancement()
+			p.advance()
+		} else if p.currentToken().Kind == lexer.CONST {
+			res.Register_Advancement()
+			p.advance()
+
+			if p.currentToken().Kind != lexer.IDENTIFIER {
+				errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, fmt.Sprintf("Expected identifier, got %s", p.currentToken().Value))
+				return res.Failure(&errorNya)
+			}
+
+			varName := p.currentToken()
+			res.Register_Advancement()
+			p.advance()
+
+			if p.currentToken().Kind != lexer.ASSIGNMENT && p.currentToken().Kind != lexer.LEFT_ARROW {
+				errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, fmt.Sprintf("Expected '=' or '<-', got %s", p.currentToken().Value))
+				return res.Failure(&errorNya)
+			}
+
+			res.Register_Advancement()
+			p.advance()
+
+			expr := res.Register(p.expr())
+			if res.Error != nil {
+				return res
+			}
+
+			IsiNode = append(IsiNode, common.VarAssignNode{
+				VarName:     varName,
+				ValueNode:   expr,
+				ApakahConst: true,
+				Pos_Start:   varName.Pos_Start,
+				Pos_end:     varName.Pos_End,
+			})
 		} else {
 			errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, fmt.Sprintf("Expected identifier, got %s", p.currentToken().Value))
 			return res.Failure(&errorNya)
 		}
-
-		if p.currentToken().Kind != lexer.COLON {
-			errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, fmt.Sprintf("Expected ':', got %s", p.currentToken().Value))
-			return res.Failure(&errorNya)
-		}
-
-		res.Register_Advancement()
-		p.advance()
-
-		tipeData := p.currentToken().Kind
-		switch tipeData {
-		case lexer.INTEGER, lexer.REAL:
-			for _, val := range ListVarNameToks {
-				IsiNode = append(IsiNode, common.VarAssignNode{
-					VarName: val,
-					ValueNode: common.NumberNode{
-						Token: lexer.NewToken(lexer.NUMBER, "0", nil, nil),
-					},
-					Pos_Start: val.Pos_Start,
-					Pos_end:   val.Pos_End,
-				})
-			}
-		case lexer.STRINGTYPE:
-			for _, val := range ListVarNameToks {
-				IsiNode = append(IsiNode, common.VarAssignNode{
-					VarName: val,
-					ValueNode: common.StringNode{
-						Token: lexer.NewToken(lexer.NUMBER, "\"\"", nil, nil),
-					},
-					Pos_Start: val.Pos_Start,
-					Pos_end:   val.Pos_End,
-				})
-			}
-		}
-
-		res.Register_Advancement()
-		p.advance()
 
 		if p.currentToken().Kind == lexer.NEWLINE {
 			res.Register_Advancement()
