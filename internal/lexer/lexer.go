@@ -26,7 +26,16 @@ func (lex *lexer) advanceN(n int) {
 }
 
 func (lex *lexer) push(token Token) {
+	if ApakahAdaNewLine && lex.last().Kind != NEWLINE {
+		lex.Tokens = append(lex.Tokens, NewToken(NEWLINE, "\n", lex.Pos, nil))
+	}
+
+	ApakahAdaNewLine = false
 	lex.Tokens = append(lex.Tokens, token)
+}
+
+func (lex *lexer) last() Token {
+	return lex.Tokens[len(lex.Tokens)-1]
 }
 
 func (lex *lexer) remainder() string {
@@ -37,6 +46,10 @@ func (lex *lexer) at_eof() bool {
 	return lex.Pos.Idx >= len(lex.Source)
 }
 
+var RegexNewLine = regexp.MustCompile(`\n|;`)
+var newLinePos []int
+var ApakahAdaNewLine bool = false
+
 func Tokenize(source string, fileName string) []Token {
 	if fileName == "" {
 		fileName = "<stdin>"
@@ -44,18 +57,19 @@ func Tokenize(source string, fileName string) []Token {
 
 	lex := createLexer(source, fileName)
 
+	/* [Really bad to fix the space problem. Took me 3 or 4 days to fix it. I can't think of the solution other than this.] 07/02/2025 17:25 */
+	matches := RegexNewLine.FindAllStringIndex(source, -1)
+	newLinePos = make([]int, 0)
+	for _, match := range matches {
+		newLinePos = append(newLinePos, match[1])
+	}
+
 	for !lex.at_eof() {
 		matched := false
-		apakahAdaNewLine := false
 
 		for _, pattern := range lex.patterns {
 			loc := pattern.regex.FindStringIndex(lex.remainder())
 			if loc != nil {
-				if loc[0] == 1 && loc[1] == 2 && lex.remainder()[loc[0]:loc[1]] == "\n" && !apakahAdaNewLine {
-					apakahAdaNewLine = true
-					lex.push(NewToken(NEWLINE, "\n", lex.Pos, nil))
-				}
-
 				if loc[0] == 0 {
 					pattern.handler(lex, pattern.regex)
 					matched = true
@@ -130,7 +144,8 @@ func createLexer(source string, fn string) *lexer {
 			{regexp.MustCompile(`/`), defaultHandler(SLASH, "/")},
 			{regexp.MustCompile(`\*`), defaultHandler(STAR, "*")},
 			{regexp.MustCompile(`%`), defaultHandler(PERCENT, "%")},
-			{regexp.MustCompile(`^`), defaultHandler(POWER, "^")},
+			{regexp.MustCompile(`\^`), defaultHandler(POWER, "^")},
+			{regexp.MustCompile(`^`), defaultHandler(NEWLINE, "\n")},
 		},
 	}
 
@@ -143,9 +158,18 @@ func numberHandler(lex *lexer, regex *regexp.Regexp) {
 	lex.advanceN(len(match))
 }
 
+var Jarak = 0
+
 func skipHandler(lex *lexer, regex *regexp.Regexp) {
 	match := regex.FindStringIndex(lex.remainder())
 	lex.advanceN(match[1])
+
+	for len(newLinePos) > 0 && lex.Pos.Idx >= newLinePos[0] {
+		ApakahAdaNewLine = true
+		newLinePos = newLinePos[1:]
+	}
+
+	// fmt.Println("Skip", matchesNewLine, match[1], lex.Pos.Idx)
 }
 
 func stringHandler(lex *lexer, regex *regexp.Regexp) {

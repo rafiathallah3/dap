@@ -9,15 +9,17 @@ import (
 )
 
 type parser struct {
-	tokens        []lexer.Token
-	hasEndProgram bool
-	tok_index     int
+	tokens          []lexer.Token
+	hasEndProgram   bool
+	tok_index       int
+	apakahSatuBaris bool
 }
 
-func CreateParser(tokens []lexer.Token) *parser {
+func CreateParser(tokens []lexer.Token, ApakahSatuBaris bool) *parser {
 	p := &parser{
-		tokens:    tokens,
-		tok_index: -1,
+		tokens:          tokens,
+		tok_index:       -1,
+		apakahSatuBaris: ApakahSatuBaris,
 	}
 
 	p.advance()
@@ -31,6 +33,36 @@ func (p *parser) Parse(programName *string) common.Expr {
 		res.Register_Advancement()
 		p.advance()
 	}
+
+	res.Register(p.DapatinProgram())
+	if res.Error != nil && !p.apakahSatuBaris {
+		return res
+	}
+
+	hasil := p.statements().(*common.ParseResult)
+	if hasil.Error == nil {
+		if !p.hasEndProgram && p.currentToken().Kind != lexer.ENDPROGRAM && !p.apakahSatuBaris {
+			errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, fmt.Sprintf("Expected 'endprogram' got %s", p.currentToken().Value))
+			return hasil.Failure(&errorNya)
+			// return hasil
+		}
+
+		if p.currentToken().Kind == lexer.ENDPROGRAM {
+			hasil.Register_Advancement()
+			p.advance()
+		}
+
+		if p.currentToken().Kind != lexer.EOF {
+			errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, fmt.Sprintf("Expected +, -, *, / or ^ | Got %s", p.currentToken().Value))
+			return hasil.Failure(&errorNya)
+		}
+	}
+
+	return hasil
+}
+
+func (p *parser) DapatinProgram() common.Expr {
+	res := &common.ParseResult{}
 
 	for p.currentToken().Kind != lexer.PROGRAM {
 		errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Program name required")
@@ -50,27 +82,7 @@ func (p *parser) Parse(programName *string) common.Expr {
 	res.Register_Advancement()
 	p.advance()
 
-	hasil := p.statements().(*common.ParseResult)
-
-	if hasil.Error == nil {
-		if !p.hasEndProgram && p.currentToken().Kind != lexer.ENDPROGRAM {
-			errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, fmt.Sprintf("Expected 'endprogram' got %s", p.currentToken().Value))
-			return hasil.Failure(&errorNya)
-			// return hasil
-		}
-
-		if p.currentToken().Kind == lexer.ENDPROGRAM {
-			hasil.Register_Advancement()
-			p.advance()
-		}
-
-		if p.currentToken().Kind != lexer.EOF {
-			errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, fmt.Sprintf("Expected +, -, *, / or ^ | Got %s", p.currentToken().Value))
-			return hasil.Failure(&errorNya)
-		}
-	}
-
-	return hasil
+	return res
 }
 
 func (p *parser) currentToken() lexer.Token {
@@ -941,6 +953,11 @@ func (p *parser) call() common.Expr {
 			if apakahPakeKurung && p.currentToken().Kind != lexer.CLOSE_PAREN {
 				errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected, ')' or ','")
 				return res.Failure(&errorNya)
+			}
+
+			if p.currentToken().Kind == lexer.CLOSE_PAREN {
+				res.Register_Advancement()
+				p.advance()
 			}
 		}
 

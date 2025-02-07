@@ -44,7 +44,7 @@ type Context struct {
 func PrintValueInterpreter(n Value) string {
 	switch n := n.(type) {
 	case Number:
-		return fmt.Sprintf("%g", n.Value)
+		return strconv.FormatFloat(n.Value, 'f', -1, 64)
 	case String:
 		return n.Value
 	case List:

@@ -2,7 +2,7 @@
 
 A friendly pseudocode that I implemented, inspired by my university professor, Mr. Jimmy. To prove that I can be like him. One day.
 
-Example code:
+## Example code:
 
 ```javascript
 program ThisIsAProgram
@@ -19,5 +19,21 @@ algorithm
 endprogram
 ```
 
-<hr/>
-The bug I can't fix occurs when you add a space at the end of a word before a newline; the newline token is ignored. The cause might be the regular expression in lexer.go
+## How to download:
+Clone the repository
+```
+git clone https://github.com/rafiathallah3/dap.git
+```
+Change directory
+```
+cd dap
+```
+
+Install Golang module.
+```
+go install
+```
+Run.
+```
+dap ThisIsAProgram.dap
+```

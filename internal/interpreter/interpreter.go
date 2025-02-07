@@ -99,6 +99,9 @@ func (i *Interpreter) VisitVarAccessNode(node common.Expr, context *common.Conte
 
 	var_name := nodeVarAccessNode.VarNameTok.Value
 	value := context.Symbol_Table.Get(var_name)
+	if value == nil {
+		value = common.Null{}
+	}
 
 	switch value.(type) {
 	case common.Null:
