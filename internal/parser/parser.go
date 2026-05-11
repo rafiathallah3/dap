@@ -44,7 +44,6 @@ func (p *parser) Parse(programName *string) common.Expr {
 		if !p.hasEndProgram && p.currentToken().Kind != lexer.ENDPROGRAM && !p.apakahSatuBaris {
 			errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, fmt.Sprintf("Expected 'endprogram' got %s", p.currentToken().Value))
 			return hasil.Failure(&errorNya)
-			// return hasil
 		}
 
 		if p.currentToken().Kind == lexer.ENDPROGRAM {
@@ -52,8 +51,13 @@ func (p *parser) Parse(programName *string) common.Expr {
 			p.advance()
 		}
 
+		for p.currentToken().Kind == lexer.NEWLINE {
+			hasil.Register_Advancement()
+			p.advance()
+		}
+
 		if p.currentToken().Kind != lexer.EOF {
-			errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, fmt.Sprintf("Expected +, -, *, / or ^ | Got %s", p.currentToken().Value))
+			errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, fmt.Sprintf("Expected end of file, got %s", p.currentToken().Value))
 			return hasil.Failure(&errorNya)
 		}
 	}
@@ -90,22 +94,88 @@ func (p *parser) currentToken() lexer.Token {
 }
 
 func (p *parser) advance() lexer.Token {
-	var tk lexer.Token
 	p.tok_index++
-
-	if p.tok_index < len(p.tokens) {
-		tk = p.currentToken()
-	} else {
-		p.tok_index--
-		tk = p.currentToken()
-	}
-
-	return tk
+	return p.currentToken()
 }
 
 func (p *parser) reverse(amount int) lexer.Token {
 	p.tok_index -= amount
 	return p.currentToken()
+}
+
+func (p *parser) parse_type() common.Expr {
+	res := &common.ParseResult{}
+
+	if p.currentToken().Kind == lexer.ARRAY {
+		posStart := p.currentToken().Pos_Start.Copy()
+		res.Register_Advancement()
+		p.advance()
+
+		if p.currentToken().Kind != lexer.OPEN_BRACKET {
+			errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected '['")
+			return res.Failure(&errorNya)
+		}
+
+		res.Register_Advancement()
+		p.advance()
+
+		startExpr := res.Register(p.expr())
+		if res.Error != nil {
+			return res
+		}
+
+		if p.currentToken().Kind != lexer.DOT_DOT {
+			errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected '..'")
+			return res.Failure(&errorNya)
+		}
+
+		res.Register_Advancement()
+		p.advance()
+
+		endExpr := res.Register(p.expr())
+		if res.Error != nil {
+			return res
+		}
+
+		if p.currentToken().Kind != lexer.CLOSE_BRACKET {
+			errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected ']'")
+			return res.Failure(&errorNya)
+		}
+
+		res.Register_Advancement()
+		p.advance()
+
+		if p.currentToken().Kind != lexer.OF {
+			errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected 'of'")
+			return res.Failure(&errorNya)
+		}
+
+		res.Register_Advancement()
+		p.advance()
+
+		ofType := res.Register(p.parse_type())
+		if res.Error != nil {
+			return res
+		}
+
+		return res.Success(common.ArrayTypeNode{
+			StartNode: startExpr,
+			EndNode:   endExpr,
+			OfType:    ofType,
+			Pos_Start: posStart,
+			Pos_End:   ofType.GetPosEnd(),
+		})
+	}
+
+	if p.currentToken().Kind == lexer.INTEGER || p.currentToken().Kind == lexer.REAL || p.currentToken().Kind == lexer.STRINGTYPE || p.currentToken().Kind == lexer.IDENTIFIER {
+		tok := p.currentToken()
+		res.Register_Advancement()
+		p.advance()
+		return res.Success(common.VarAccessNode{VarNameTok: tok, Pos_Start: tok.Pos_Start, Pos_end: tok.Pos_End})
+	}
+
+	errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected type (integer, real, string, or array)")
+	return res.Failure(&errorNya)
 }
 
 func (p *parser) dictionary_expr() common.Expr {
@@ -148,34 +218,19 @@ func (p *parser) dictionary_expr() common.Expr {
 			res.Register_Advancement()
 			p.advance()
 
-			tipeData := p.currentToken().Kind
-			switch tipeData {
-			case lexer.INTEGER, lexer.REAL:
-				for _, val := range ListVarNameToks {
-					IsiNode = append(IsiNode, common.VarAssignNode{
-						VarName: val,
-						ValueNode: common.NumberNode{
-							Token: lexer.NewToken(lexer.NUMBER, "0", nil, nil),
-						},
-						Pos_Start: val.Pos_Start,
-						Pos_end:   val.Pos_End,
-					})
-				}
-			case lexer.STRINGTYPE:
-				for _, val := range ListVarNameToks {
-					IsiNode = append(IsiNode, common.VarAssignNode{
-						VarName: val,
-						ValueNode: common.StringNode{
-							Token: lexer.NewToken(lexer.NUMBER, "\"\"", nil, nil),
-						},
-						Pos_Start: val.Pos_Start,
-						Pos_end:   val.Pos_End,
-					})
-				}
+			tipeDataNode := res.Register(p.parse_type())
+			if res.Error != nil {
+				return res
 			}
 
-			res.Register_Advancement()
-			p.advance()
+			for _, val := range ListVarNameToks {
+				IsiNode = append(IsiNode, common.VarAssignNode{
+					VarName:   val,
+					ValueNode: tipeDataNode,
+					Pos_Start: val.Pos_Start,
+					Pos_end:   tipeDataNode.GetPosEnd(),
+				})
+			}
 		} else if p.currentToken().Kind == lexer.CONST {
 			res.Register_Advancement()
 			p.advance()
@@ -188,7 +243,7 @@ func (p *parser) dictionary_expr() common.Expr {
 			varName := p.currentToken()
 			res.Register_Advancement()
 			p.advance()
-
+			// fmt.Fprintf(os.Stderr, "EXPR CHECK: %s (%s)\n", lexer.TokenKindString(p.currentToken().Kind), p.currentToken().Value)
 			if p.currentToken().Kind != lexer.ASSIGNMENT && p.currentToken().Kind != lexer.LEFT_ARROW {
 				errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, fmt.Sprintf("Expected '=' or '<-', got %s", p.currentToken().Value))
 				return res.Failure(&errorNya)
@@ -209,6 +264,90 @@ func (p *parser) dictionary_expr() common.Expr {
 				Pos_Start:   varName.Pos_Start,
 				Pos_end:     varName.Pos_End,
 			})
+		} else if p.currentToken().Kind == lexer.TYPE {
+			res.Register_Advancement()
+			p.advance()
+
+			if p.currentToken().Kind != lexer.IDENTIFIER {
+				errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, "Expected identifier after 'type'")
+				return res.Failure(&errorNya)
+			}
+			typeName := p.currentToken()
+			res.Register_Advancement()
+			p.advance()
+
+			if p.currentToken().Kind == lexer.COLON {
+				// Type Alias: type Alias: TargetType
+				res.Register_Advancement()
+				p.advance()
+				targetType := res.Register(p.parse_type())
+				if res.Error != nil {
+					return res
+				}
+				IsiNode = append(IsiNode, common.TypeAliasNode{
+					AliasName:  typeName,
+					TargetType: targetType,
+					Pos_Start:  typeName.Pos_Start,
+					Pos_End:    targetType.GetPosEnd(),
+				})
+			} else if p.currentToken().Kind == lexer.LESS {
+				// Struct: type Name < field: type ... >
+				res.Register_Advancement()
+				p.advance()
+
+				var fields []common.VarAssignNode
+				for p.currentToken().Kind != lexer.GREATER {
+					if p.currentToken().Kind == lexer.NEWLINE {
+						res.Register_Advancement()
+						p.advance()
+						continue
+					}
+
+					// Parse field: type
+					if p.currentToken().Kind != lexer.IDENTIFIER {
+						errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, "Expected field name")
+						return res.Failure(&errorNya)
+					}
+					fieldName := p.currentToken()
+					res.Register_Advancement()
+					p.advance()
+
+					if p.currentToken().Kind != lexer.COLON {
+						errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, "Expected ':' after field name")
+						return res.Failure(&errorNya)
+					}
+					res.Register_Advancement()
+					p.advance()
+
+					fieldType := res.Register(p.parse_type())
+					if res.Error != nil {
+						return res
+					}
+
+					fields = append(fields, common.VarAssignNode{
+						VarName:   fieldName,
+						ValueNode: fieldType,
+						Pos_Start: fieldName.Pos_Start,
+						Pos_end:   fieldType.GetPosEnd(),
+					})
+				}
+				posEnd := p.currentToken().Pos_End.Copy()
+				res.Register_Advancement()
+				p.advance()
+
+				IsiNode = append(IsiNode, common.StructTypeNode{
+					StructName: typeName,
+					Fields:     fields,
+					Pos_Start:  typeName.Pos_Start,
+					Pos_End:    posEnd,
+				})
+			} else {
+				errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, "Expected ':' or '<'")
+				return res.Failure(&errorNya)
+			}
+		} else if p.currentToken().Kind == lexer.NEWLINE {
+			res.Register_Advancement()
+			p.advance()
 		} else {
 			errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, fmt.Sprintf("Expected identifier, got %s", p.currentToken().Value))
 			return res.Failure(&errorNya)
@@ -470,8 +609,8 @@ func (p *parser) for_expr() common.Expr {
 	res.Register_Advancement()
 	p.advance()
 
-	if p.currentToken().Kind != lexer.ASSIGNMENT {
-		errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, "Expected '='")
+	if p.currentToken().Kind != lexer.ASSIGNMENT && p.currentToken().Kind != lexer.LEFT_ARROW {
+		errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, "Expected '=' or '<-'")
 		return res.Failure(&errorNya)
 	}
 
@@ -920,56 +1059,109 @@ func (p *parser) call() common.Expr {
 		return res
 	}
 
-	if p.currentToken().Kind == lexer.OPEN_PAREN || tools.ApakahBuiltinFunction(atom.Print()) {
-		apakahPakeKurung := false
-		if p.currentToken().Kind == lexer.OPEN_PAREN {
-			apakahPakeKurung = true
-			res.Register_Advancement()
-			p.advance()
-		}
-
-		ArgNodes := make([]common.Expr, 0)
-
-		if p.currentToken().Kind == lexer.CLOSE_PAREN {
-			res.Register_Advancement()
-			p.advance()
-		} else {
-			ArgNodes = append(ArgNodes, res.Register(p.expr()))
-			if res.Error != nil {
-				errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected, ')', 'var', 'if', 'for', 'while', 'fun', number, identifier")
-				return res.Failure(&errorNya)
-			}
-
-			for p.currentToken().Kind == lexer.COMMA {
+	for p.currentToken().Kind == lexer.OPEN_PAREN || p.currentToken().Kind == lexer.OPEN_BRACKET || p.currentToken().Kind == lexer.DOT || tools.ApakahBuiltinFunction(atom.Print()) {
+		if p.currentToken().Kind == lexer.OPEN_PAREN || tools.ApakahBuiltinFunction(atom.Print()) {
+			var argNodes []common.Expr
+			if p.currentToken().Kind == lexer.OPEN_PAREN {
 				res.Register_Advancement()
 				p.advance()
 
-				ArgNodes = append(ArgNodes, res.Register(p.expr()))
-				if res.Error != nil {
-					return res
+				if p.currentToken().Kind == lexer.CLOSE_PAREN {
+					res.Register_Advancement()
+					p.advance()
+				} else {
+					argNodes = append(argNodes, res.Register(p.expr()))
+					if res.Error != nil {
+						return res
+					}
+
+					for p.currentToken().Kind == lexer.COMMA {
+						res.Register_Advancement()
+						p.advance()
+
+						argNodes = append(argNodes, res.Register(p.expr()))
+						if res.Error != nil {
+							return res
+						}
+					}
+
+					if p.currentToken().Kind != lexer.CLOSE_PAREN {
+						errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected ',' or ')'")
+						return res.Failure(&errorNya)
+					}
+
+					res.Register_Advancement()
+					p.advance()
+				}
+			} else if tools.ApakahBuiltinFunction(atom.Print()) {
+				// Builtin function without parens (e.g., write M[0][0])
+				// Try to parse expressions until end of line or keyword
+				for {
+					if p.currentToken().Kind == lexer.NEWLINE || p.currentToken().Kind == lexer.EOF || p.currentToken().Kind == lexer.ENDPROGRAM || p.currentToken().Kind == lexer.ENDWHILE || p.currentToken().Kind == lexer.ENDFOR || p.currentToken().Kind == lexer.ENDIF || p.currentToken().Kind == lexer.ELSE || p.currentToken().Kind == lexer.ELIF {
+						break
+					}
+					argNodes = append(argNodes, res.Register(p.expr()))
+					if res.Error != nil {
+						return res
+					}
+					if p.currentToken().Kind == lexer.COMMA {
+						res.Register_Advancement()
+						p.advance()
+					} else {
+						break
+					}
 				}
 			}
 
-			if apakahPakeKurung && p.currentToken().Kind != lexer.CLOSE_PAREN {
-				errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected, ')' or ','")
+			atom = common.CallNode{
+				NodeToCall: atom,
+				ArgNodes:   argNodes,
+				Pos_Start:  atom.GetPosStart(),
+				Pos_end:    p.currentToken().Pos_End.Copy(),
+			}
+		} else if p.currentToken().Kind == lexer.OPEN_BRACKET {
+			res.Register_Advancement()
+			p.advance()
+
+			indexExpr := res.Register(p.expr())
+			if res.Error != nil {
+				return res
+			}
+
+			if p.currentToken().Kind != lexer.CLOSE_BRACKET {
+				errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected ']'")
 				return res.Failure(&errorNya)
 			}
 
-			if p.currentToken().Kind == lexer.CLOSE_PAREN {
-				res.Register_Advancement()
-				p.advance()
+			res.Register_Advancement()
+			p.advance()
+
+			atom = common.ArrayIndexNode{
+				Left:      atom,
+				Index:     indexExpr,
+				Pos_Start: atom.GetPosStart(),
+				Pos_End:   p.tokens[p.tok_index-1].Pos_End.Copy(),
+			}
+		} else if p.currentToken().Kind == lexer.DOT {
+			res.Register_Advancement()
+			p.advance()
+
+			if p.currentToken().Kind != lexer.IDENTIFIER {
+				errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected field name after '.'")
+				return res.Failure(&errorNya)
+			}
+			memberTok := p.currentToken()
+			res.Register_Advancement()
+			p.advance()
+
+			atom = common.MemberAccessNode{
+				Object:    atom,
+				MemberTok: memberTok,
+				Pos_Start: atom.GetPosStart(),
+				Pos_End:   memberTok.Pos_End.Copy(),
 			}
 		}
-
-		callNodes := common.CallNode{
-			NodeToCall: atom,
-			ArgNodes:   ArgNodes,
-		}
-		callNodes.Pos_Start = callNodes.GetPosStart()
-		callNodes.Pos_end = callNodes.GetPosEnd()
-		return res.Success(callNodes)
 	}
-
 	return res.Success(atom)
 }
 
@@ -1051,7 +1243,7 @@ func (p *parser) statements() common.Expr {
 	statements = append(statements, statement)
 
 	moreStatement := true
-	for {
+	for moreStatement {
 		NewLineCount := 0
 		for p.currentToken().Kind == lexer.NEWLINE {
 			res.Register_Advancement()
@@ -1059,21 +1251,25 @@ func (p *parser) statements() common.Expr {
 			NewLineCount++
 		}
 
-		if NewLineCount == 0 {
-			moreStatement = false
-		}
-
-		if !moreStatement {
+		if NewLineCount == 0 && len(statements) > 0 {
 			break
 		}
 
-		statement := res.Try_register(p.statement())
+		if p.currentToken().Kind == lexer.EOF || p.currentToken().Kind == lexer.ENDPROGRAM {
+			break
+		}
+
+		// Use a local result for this statement to avoid reversing everything if it fails
+		statementRes := &common.ParseResult{}
+		statement := statementRes.Try_register(p.statement())
+		res.Register_Advancement() 
+		
 		if statement == nil {
-			p.reverse(res.ToReverseCount)
+			p.reverse(statementRes.ToReverseCount)
 			moreStatement = false
 			continue
 		}
-
+		res.AdvanceCount += statementRes.AdvanceCount
 		statements = append(statements, statement)
 	}
 
@@ -1126,6 +1322,11 @@ func (p *parser) statement() common.Expr {
 
 		p.hasEndProgram = true
 		return res.Success(nil)
+	case lexer.ALGORITHM:
+		res.Register_Advancement()
+		p.advance()
+
+		return res.Success(common.NullNode{})
 	}
 
 	expr := res.Register(p.expr())
@@ -1140,64 +1341,85 @@ func (p *parser) statement() common.Expr {
 func (p *parser) expr() common.Expr {
 	res := &common.ParseResult{}
 
-	// if p.currentToken().Kind == lexer.VAR {
-	// 	res.Register_Advancement()
-	// 	p.advance()
-
-	// 	if p.currentToken().Kind != lexer.IDENTIFIER {
-	// 		errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected Identifier")
-	// 		return res.Failure(&errorNya)
-	// 	}
-
-	// 	var_name := p.currentToken()
-	// 	res.Register_Advancement()
-	// 	p.advance()
-
-	// 	if p.currentToken().Kind != lexer.ASSIGNMENT {
-	// 		errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected '='")
-	// 		return res.Failure(&errorNya)
-	// 	}
-
-	// 	res.Register_Advancement()
-	// 	p.advance()
-
-	// 	expr := res.Register(p.expr())
-
-	// 	if res.Error != nil {
-	// 		return res
-	// 	}
-
-	// 	return res.Success(common.VarAssignNode{VarName: var_name, ValueNode: expr, Pos_Start: var_name.Pos_Start, Pos_end: expr.GetPosEnd()})
-	// }
-
 	apakahLeftArrow := false
 	if p.currentToken().Kind == lexer.IDENTIFIER {
-		varNameTok := p.currentToken()
-		res.Register_Advancement()
-		p.advance()
+		var lookahead lexer.Token
+		lookaheadCount := 0
+		bracketLevel := 0
 
-		var statement common.Expr
-		if p.currentToken().Kind == lexer.LEFT_ARROW {
-			res.Register_Advancement()
-			p.advance()
+		for {
+			lookahead = p.tokens[p.tok_index+lookaheadCount]
+			if lookahead.Kind == lexer.OPEN_BRACKET {
+				bracketLevel++
+			} else if lookahead.Kind == lexer.CLOSE_BRACKET {
+				bracketLevel--
+			}
 
-			statement = res.Register(p.expr())
+			if bracketLevel < 0 {
+				break
+			}
+
+			if bracketLevel == 0 && (lookahead.Kind == lexer.ASSIGNMENT || lookahead.Kind == lexer.LEFT_ARROW) {
+				apakahLeftArrow = true
+				break
+			}
+			if lookahead.Kind != lexer.IDENTIFIER && lookahead.Kind != lexer.OPEN_BRACKET && lookahead.Kind != lexer.CLOSE_BRACKET && lookahead.Kind != lexer.NUMBER && lookahead.Kind != lexer.DOT {
+				break
+			}
+			if lookahead.Kind == lexer.NEWLINE {
+				break
+			}
+			lookaheadCount++
+			if p.tok_index+lookaheadCount >= len(p.tokens) {
+				break
+			}
+		}
+
+		if apakahLeftArrow {
+			lhs := res.Register(p.call())
 			if res.Error != nil {
 				return res
 			}
 
-			apakahLeftArrow = true
-		}
+			if p.currentToken().Kind != lexer.ASSIGNMENT && p.currentToken().Kind != lexer.LEFT_ARROW {
+				errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected '<-' or '='")
+				return res.Failure(&errorNya)
+			}
 
-		if apakahLeftArrow {
-			return res.Success(common.VarAssignNode{
-				VarName:   varNameTok,
-				ValueNode: statement,
-				Pos_Start: varNameTok.Pos_Start,
-				Pos_end:   statement.GetPosEnd(),
-			})
-		} else {
-			p.reverse(1)
+			res.Register_Advancement()
+			p.advance()
+
+			expr := res.Register(p.expr())
+			if res.Error != nil {
+				return res
+			}
+
+			switch lhs := lhs.(type) {
+			case common.VarAccessNode:
+				return res.Success(common.VarAssignNode{
+					VarName:   lhs.VarNameTok,
+					ValueNode: expr,
+					Pos_Start: lhs.Pos_Start,
+					Pos_end:   expr.GetPosEnd(),
+				})
+			case common.ArrayIndexNode:
+				return res.Success(common.ArrayAssignNode{
+					ArrayAccess: lhs,
+					ValueNode:   expr,
+					Pos_Start:   lhs.GetPosStart(),
+					Pos_End:     expr.GetPosEnd(),
+				})
+			case common.MemberAccessNode:
+				return res.Success(common.MemberAssignNode{
+					MemberAccess: lhs,
+					ValueNode:    expr,
+					Pos_Start:    lhs.GetPosStart(),
+					Pos_End:      expr.GetPosEnd(),
+				})
+			default:
+				errorNya := common.InvalidSyntax(*lhs.GetPosStart(), *lhs.GetPosEnd(), "Illegal assignment target")
+				return res.Failure(&errorNya)
+			}
 		}
 	}
 

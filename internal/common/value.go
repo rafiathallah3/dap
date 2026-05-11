@@ -7,7 +7,15 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"slices"
 )
+
+func safePos(p *tools.Position) tools.Position {
+	if p == nil {
+		return tools.Position{}
+	}
+	return *p
+}
 
 type SymbolTable struct {
 	Symbols map[string]Value
@@ -53,14 +61,43 @@ func PrintValueInterpreter(n Value) string {
 		}
 
 		hasil := "["
-		for _, v := range n.Elements {
-			hasil += PrintValueInterpreter(v) + ", "
+		for i, v := range n.Elements {
+			hasil += PrintValueInterpreter(v)
+			if i < len(n.Elements)-1 {
+				hasil += ", "
+			}
 		}
-		hasil = hasil[:len(hasil)-2]
+		hasil += "]"
+		return hasil
+	case Array:
+		hasil := "["
+		for i, v := range n.Elements {
+			hasil += PrintValueInterpreter(v)
+			if i < len(n.Elements)-1 {
+				hasil += ", "
+			}
+		}
 		hasil += "]"
 		return hasil
 	case Function:
 		return fmt.Sprintf("<function %s>", n.Name)
+	case Struct:
+		hasil := "<"
+		keys := make([]string, 0, len(n.Fields))
+		for k := range n.Fields {
+			keys = append(keys, k)
+		}
+		slices.Sort(keys)
+		for i, k := range keys {
+			hasil += fmt.Sprintf("%s: %v", k, PrintValueInterpreter(n.Fields[k]))
+			if i < len(keys)-1 {
+				hasil += ", "
+			}
+		}
+		hasil += ">"
+		return hasil
+	case Type:
+		return "<type>"
 	case Null:
 		return "NULL"
 	case *RTResult:
@@ -101,6 +138,49 @@ func (n Null) Copy() Value {
 }
 func (n Null) Is_true() bool {
 	return false
+}
+
+type Array struct {
+	Elements  []Value
+	Start     int
+	End       int
+	Context   *Context
+	Pos_Start *tools.Position
+	Pos_End   *tools.Position
+}
+
+func (n Array) Print() string {
+	return PrintValueInterpreter(n)
+}
+
+func (n Array) Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Value {
+	n.Pos_Start = Pos_Start
+	n.Pos_End = Pos_End
+	return n
+}
+
+func (n Array) Set_context(context *Context) Value {
+	n.Context = context
+	return n
+}
+
+func (n Array) Get_context() *Context {
+	return n.Context
+}
+
+func (n Array) Copy() Value {
+	return Array{
+		Elements:  n.Elements,
+		Start:     n.Start,
+		End:       n.End,
+		Context:   n.Context,
+		Pos_Start: n.Pos_Start,
+		Pos_End:   n.Pos_End,
+	}
+}
+
+func (n Array) Is_true() bool {
+	return len(n.Elements) != 0
 }
 
 type List struct {
@@ -159,7 +239,8 @@ func (n List) Subbed_to(other Value) (Value, *Error) {
 		return List{Elements: append(n.Elements[:angka], n.Elements[angka+1:]...)}.Set_context(n.Context), nil
 	}
 
-	panic("TIDAK BISA")
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform subtraction on List with the given type", n.Context)
+	return nil, &err
 }
 
 func (n List) Multed_by(other Value) (Value, *Error) {
@@ -168,7 +249,8 @@ func (n List) Multed_by(other Value) (Value, *Error) {
 		return List{Elements: append(n.Elements, other.Elements...)}.Set_context(n.Context), nil
 	}
 
-	panic("TIDAK BISA")
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform multiplication on List with the given type", n.Context)
+	return nil, &err
 }
 
 func (n List) Dived_by(other Value) (Value, *Error) {
@@ -184,7 +266,8 @@ func (n List) Dived_by(other Value) (Value, *Error) {
 		return n.Elements[angka], nil
 	}
 
-	panic("TIDAK BISA")
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform division on List with the given type", n.Context)
+	return nil, &err
 }
 
 type String struct {
@@ -214,11 +297,12 @@ func (n String) Get_context() *Context {
 }
 
 func (n String) Copy() Value {
-	copy := String{}
-	copy.Value = n.Value
-	copy.Set_pos(n.Pos_Start, n.Pos_End)
-	copy.Set_context(n.Context)
-	return copy
+	return String{
+		Value:     n.Value,
+		Pos_Start: n.Pos_Start,
+		Pos_End:   n.Pos_End,
+		Context:   n.Context,
+	}
 }
 
 func (n String) Is_true() bool {
@@ -231,7 +315,8 @@ func (s String) Added_to(other Value) (Value, *Error) {
 		return String{Value: s.Value + other.Value}.Set_context(s.Context), nil
 	}
 
-	panic("TIDAK BISA")
+	err := RTError(safePos(s.Pos_Start), safePos(s.Pos_End), "Illegal operation: cannot concatenate String with the given type", s.Context)
+	return nil, &err
 }
 
 func (s String) Multed_by(other Value) (Value, *Error) {
@@ -240,7 +325,8 @@ func (s String) Multed_by(other Value) (Value, *Error) {
 		return String{Value: strings.Repeat(s.Value, int(other.Value))}.Set_context(s.Context), nil
 	}
 
-	panic("TIDAK BISA")
+	err := RTError(safePos(s.Pos_Start), safePos(s.Pos_End), "Illegal operation: cannot multiply String with the given type", s.Context)
+	return nil, &err
 }
 
 type Number struct {
@@ -270,11 +356,12 @@ func (n Number) Get_context() *Context {
 }
 
 func (n Number) Copy() Value {
-	copy := Number{}
-	copy.Value = n.Value
-	copy.Set_pos(n.Pos_Start, n.Pos_End)
-	copy.Set_context(n.Context)
-	return copy
+	return Number{
+		Value:     n.Value,
+		Pos_Start: n.Pos_Start,
+		Pos_End:   n.Pos_End,
+		Context:   n.Context,
+	}
 }
 
 func (n Number) Added_to(other Value) (Value, *Error) {
@@ -283,7 +370,8 @@ func (n Number) Added_to(other Value) (Value, *Error) {
 		return Number{Value: n.Value + other.Value}.Set_context(n.Context), nil
 	}
 
-	panic("TIDAK BISA")
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform addition with the given type", n.Context)
+	return nil, &err
 }
 
 func (n Number) Subbed_by(other Value) (Value, *Error) {
@@ -292,7 +380,8 @@ func (n Number) Subbed_by(other Value) (Value, *Error) {
 		return Number{Value: n.Value - other.Value}.Set_context(n.Context), nil
 	}
 
-	panic("TIDAK BISA")
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform subtraction with the given type", n.Context)
+	return nil, &err
 }
 
 func (n Number) Multed_by(other Value) (Value, *Error) {
@@ -301,7 +390,8 @@ func (n Number) Multed_by(other Value) (Value, *Error) {
 		return Number{Value: n.Value * other.Value}.Set_context(n.Context), nil
 	}
 
-	panic("TIDAK BISA")
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform multiplication with the given type", n.Context)
+	return nil, &err
 }
 
 func (n Number) Divided_by(other Value) (Value, *Error) {
@@ -314,7 +404,8 @@ func (n Number) Divided_by(other Value) (Value, *Error) {
 		return Number{Value: n.Value / other.Value}.Set_context(n.Context), nil
 	}
 
-	panic("TIDAK BISA")
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform division with the given type", n.Context)
+	return nil, &err
 }
 
 func (n Number) Powered_by(other Value) (Value, *Error) {
@@ -323,7 +414,8 @@ func (n Number) Powered_by(other Value) (Value, *Error) {
 		return Number{Value: math.Pow(n.Value, other.Value)}.Set_context(n.Context), nil
 	}
 
-	panic("TIDAK BISA")
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform exponentiation with the given type", n.Context)
+	return nil, &err
 }
 
 func (n Number) Get_comparison_eq(other Value) (Value, *Error) {
@@ -332,7 +424,8 @@ func (n Number) Get_comparison_eq(other Value) (Value, *Error) {
 		return Number{Value: float64(tools.GetComparison(n.Value == other.Value))}.Set_context(n.Context), nil
 	}
 
-	panic("TIDAK BISA")
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot compare equality with the given type", n.Context)
+	return nil, &err
 }
 
 func (n Number) Get_comparison_nq(other Value) (Value, *Error) {
@@ -341,7 +434,8 @@ func (n Number) Get_comparison_nq(other Value) (Value, *Error) {
 		return Number{Value: float64(tools.GetComparison(n.Value != other.Value))}.Set_context(n.Context), nil
 	}
 
-	panic("TIDAK BISA")
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot compare inequality with the given type", n.Context)
+	return nil, &err
 }
 
 func (n Number) Get_comparison_lt(other Value) (Value, *Error) {
@@ -350,7 +444,8 @@ func (n Number) Get_comparison_lt(other Value) (Value, *Error) {
 		return Number{Value: float64(tools.GetComparison(n.Value < other.Value))}.Set_context(n.Context), nil
 	}
 
-	panic("TIDAK BISA")
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot compare with the given type", n.Context)
+	return nil, &err
 }
 
 func (n Number) Get_comparison_lte(other Value) (Value, *Error) {
@@ -359,7 +454,8 @@ func (n Number) Get_comparison_lte(other Value) (Value, *Error) {
 		return Number{Value: float64(tools.GetComparison(n.Value <= other.Value))}.Set_context(n.Context), nil
 	}
 
-	panic("TIDAK BISA")
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot compare with the given type", n.Context)
+	return nil, &err
 }
 
 func (n Number) Get_comparison_gt(other Value) (Value, *Error) {
@@ -368,7 +464,8 @@ func (n Number) Get_comparison_gt(other Value) (Value, *Error) {
 		return Number{Value: float64(tools.GetComparison(n.Value > other.Value))}.Set_context(n.Context), nil
 	}
 
-	panic("TIDAK BISA")
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot compare with the given type", n.Context)
+	return nil, &err
 }
 
 func (n Number) Get_comparison_gte(other Value) (Value, *Error) {
@@ -377,7 +474,8 @@ func (n Number) Get_comparison_gte(other Value) (Value, *Error) {
 		return Number{Value: float64(tools.GetComparison(n.Value >= other.Value))}.Set_context(n.Context), nil
 	}
 
-	panic("TIDAK BISA")
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot compare with the given type", n.Context)
+	return nil, &err
 }
 
 func (n Number) Anded_by(other Value) (Value, *Error) {
@@ -386,7 +484,8 @@ func (n Number) Anded_by(other Value) (Value, *Error) {
 		return Number{Value: float64(tools.GetComparison(n.Value != 0 && other.Value != 0))}.Set_context(n.Context), nil
 	}
 
-	panic("TIDAK BISA")
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot apply 'and' with the given type", n.Context)
+	return nil, &err
 }
 
 func (n Number) Ored_by(other Value) (Value, *Error) {
@@ -395,7 +494,8 @@ func (n Number) Ored_by(other Value) (Value, *Error) {
 		return Number{Value: float64(tools.GetComparison(n.Value != 0 || other.Value != 0))}.Set_context(n.Context), nil
 	}
 
-	panic("TIDAK BISA")
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot apply 'or' with the given type", n.Context)
+	return nil, &err
 }
 
 func (n Number) Notted() (Value, *Error) {
@@ -621,13 +721,13 @@ func (n BuiltInFunction) Execute(args []Value, rawArgs []Expr) Value {
 	method := reflect.ValueOf(n).MethodByName(methodName)
 
 	if !method.IsValid() {
-		panic("BUILT IN FUNCTION EXEcUTION IS NOT VALID")
+		panic(fmt.Sprintf("Built-in function '%s' has no Execute%s method defined", n.Name, n.Name))
 	}
 
 	results := method.Call([]reflect.Value{})
 
 	if len(results) == 0 {
-		panic("NO RESULTS FOR THE BUILT IN FUNCTION")
+		panic(fmt.Sprintf("Built-in function '%s' returned no results", n.Name))
 	}
 
 	BuiltinArgs := make([]string, results[0].Len())
@@ -657,7 +757,17 @@ func (n BuiltInFunction) ExecutePrint() ([]string, func(*Context, []Expr) Value)
 	return []string{"...value"}, func(ctx *Context, rawArgs []Expr) Value {
 		res := &RTResult{}
 
-		for _, v := range ctx.Symbol_Table.Get("value").(List).Elements {
+		vals := ctx.Symbol_Table.Get("value")
+		var elements []Value
+		if list, ok := vals.(List); ok {
+			elements = list.Elements
+		} else if arr, ok := vals.(Array); ok {
+			elements = arr.Elements
+		} else {
+			elements = []Value{vals}
+		}
+
+		for _, v := range elements {
 			fmt.Printf("%v\n", PrintValueInterpreter(v))
 		}
 
@@ -707,6 +817,79 @@ func (n BuiltInFunction) ExecuteInput() ([]string, func(*Context, []Expr) Value)
 
 		return res.Success(Null{Context: ctx})
 	}
+}
+
+type Struct struct {
+	Fields    map[string]Value
+	Context   *Context
+	Pos_Start *tools.Position
+	Pos_End   *tools.Position
+}
+
+func (n Struct) Print() string {
+	return PrintValueInterpreter(n)
+}
+
+func (n Struct) Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Value {
+	n.Pos_Start = Pos_Start
+	n.Pos_End = Pos_End
+	return n
+}
+
+func (n Struct) Set_context(context *Context) Value {
+	n.Context = context
+	return n
+}
+
+func (n Struct) Get_context() *Context {
+	return n.Context
+}
+
+func (n Struct) Copy() Value {
+	return n
+}
+
+func (n Struct) Is_true() bool {
+	return true
+}
+
+type Type struct {
+	Definition Expr
+	Context    *Context
+	Pos_Start  *tools.Position
+	Pos_End    *tools.Position
+}
+
+func (n Type) Print() string {
+	return "<type>"
+}
+
+func (n Type) Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Value {
+	n.Pos_Start = Pos_Start
+	n.Pos_End = Pos_End
+	return n
+}
+
+func (n Type) Set_context(context *Context) Value {
+	n.Context = context
+	return n
+}
+
+func (n Type) Get_context() *Context {
+	return n.Context
+}
+
+func (n Type) Copy() Value {
+	return Type{
+		Definition: n.Definition,
+		Context:    n.Context,
+		Pos_Start:  n.Pos_Start,
+		Pos_End:    n.Pos_End,
+	}
+}
+
+func (n Type) Is_true() bool {
+	return true
 }
 
 func (n BuiltInFunction) ExecuteIsNumber() ([]string, func(*Context, []Expr) Value) {

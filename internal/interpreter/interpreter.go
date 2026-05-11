@@ -41,7 +41,7 @@ func (i *Interpreter) VisitNumberNode(node common.Expr, context *common.Context)
 	parseFloat, err := strconv.ParseFloat(nodeToken.Value, 64)
 
 	if err != nil {
-		panic("ERROR! Tidak bisa parse float")
+		panic(fmt.Sprintf("Internal error: cannot parse '%s' as a number", nodeToken.Value))
 	}
 
 	numberValue := common.Number{
@@ -122,6 +122,14 @@ func (i *Interpreter) VisitVarAssignNode(node common.Expr, context *common.Conte
 
 	if res.ShouldReturn() {
 		return res
+	}
+
+	// If the value is a Type definition, initialize it to get the default value
+	if typeDef, ok := value.(common.Type); ok {
+		value = res.Register(i.InitializeType(typeDef.Definition, context))
+		if res.ShouldReturn() {
+			return res
+		}
 	}
 
 	res.Register(i.GantiVariable(nodeVarAssignNode.VarName.Value, value, context, nodeVarAssignNode.ApakahConst, nodeVarAssignNode.Pos_Start.Copy(), nodeVarAssignNode.Pos_end.Copy()))
@@ -601,6 +609,265 @@ func (i *Interpreter) GantiVariable(varName string, value common.Value, context 
 	}
 
 	context.Symbol_Table.Set(varName, value)
+
+	return res.Success(common.Null{})
+}
+
+func (i *Interpreter) VisitArrayTypeNode(node common.Expr, context *common.Context) common.Value {
+	res := &common.RTResult{}
+	arrayNode := node.(common.ArrayTypeNode)
+
+	startVal := res.Register(i.Visit(arrayNode.StartNode, context))
+	if res.ShouldReturn() {
+		return res
+	}
+
+	endVal := res.Register(i.Visit(arrayNode.EndNode, context))
+	if res.ShouldReturn() {
+		return res
+	}
+
+	if _, ok := startVal.(common.Number); !ok {
+		return res.Failure(common.RTError(*arrayNode.StartNode.GetPosStart(), *arrayNode.StartNode.GetPosEnd(), "Start index must be a number", context))
+	}
+	if _, ok := endVal.(common.Number); !ok {
+		return res.Failure(common.RTError(*arrayNode.EndNode.GetPosStart(), *arrayNode.EndNode.GetPosEnd(), "End index must be a number", context))
+	}
+
+	start := int(startVal.(common.Number).Value)
+	end := int(endVal.(common.Number).Value)
+	size := end - start + 1
+
+	if size < 0 {
+		return res.Failure(common.RTError(*node.GetPosStart(), *node.GetPosEnd(), "Array start index must be less than or equal to end index", context))
+	}
+
+	elements := make([]common.Value, size)
+	for j := 0; j < size; j++ {
+		elemVal := res.Register(i.InitializeType(arrayNode.OfType, context))
+		if res.ShouldReturn() {
+			return res
+		}
+		elements[j] = elemVal
+	}
+
+	return res.Success(common.Array{
+		Elements:  elements,
+		Start:     start,
+		End:       end,
+		Context:   context,
+		Pos_Start: node.GetPosStart(),
+		Pos_End:   node.GetPosEnd(),
+	})
+}
+
+func (i *Interpreter) VisitArrayIndexNode(node common.Expr, context *common.Context) common.Value {
+	res := &common.RTResult{}
+	indexNode := node.(common.ArrayIndexNode)
+
+	left := res.Register(i.Visit(indexNode.Left, context))
+	if res.ShouldReturn() {
+		return res
+	}
+
+	indexVal := res.Register(i.Visit(indexNode.Index, context))
+	if res.ShouldReturn() {
+		return res
+	}
+
+	array, ok := left.(common.Array)
+	if !ok {
+		return res.Failure(common.RTError(*indexNode.Left.GetPosStart(), *indexNode.Left.GetPosEnd(), "Left hand side is not an array", context))
+	}
+
+	if _, ok := indexVal.(common.Number); !ok {
+		return res.Failure(common.RTError(*indexNode.Index.GetPosStart(), *indexNode.Index.GetPosEnd(), "Array index must be a number", context))
+	}
+
+	index := int(indexVal.(common.Number).Value)
+	if index < array.Start || index > array.End {
+		return res.Failure(common.RTError(*indexNode.Index.GetPosStart(), *indexNode.Index.GetPosEnd(), fmt.Sprintf("Index %d out of bounds [%d..%d]", index, array.Start, array.End), context))
+	}
+
+	return res.Success(array.Elements[index-array.Start])
+}
+
+func (i *Interpreter) VisitArrayAssignNode(node common.Expr, context *common.Context) common.Value {
+	res := &common.RTResult{}
+	assignNode := node.(common.ArrayAssignNode)
+
+	left := res.Register(i.Visit(assignNode.ArrayAccess.Left, context))
+	if res.ShouldReturn() {
+		return res
+	}
+
+	indexVal := res.Register(i.Visit(assignNode.ArrayAccess.Index, context))
+	if res.ShouldReturn() {
+		return res
+	}
+
+	value := res.Register(i.Visit(assignNode.ValueNode, context))
+	if res.ShouldReturn() {
+		return res
+	}
+
+	array, ok := left.(common.Array)
+	if !ok {
+		return res.Failure(common.RTError(*assignNode.ArrayAccess.Left.GetPosStart(), *assignNode.ArrayAccess.Left.GetPosEnd(), "Left hand side is not an array", context))
+	}
+
+	if _, ok := indexVal.(common.Number); !ok {
+		return res.Failure(common.RTError(*assignNode.ArrayAccess.Index.GetPosStart(), *assignNode.ArrayAccess.Index.GetPosEnd(), "Array index must be a number", context))
+	}
+
+	index := int(indexVal.(common.Number).Value)
+	if index < array.Start || index > array.End {
+		return res.Failure(common.RTError(*assignNode.ArrayAccess.Index.GetPosStart(), *assignNode.ArrayAccess.Index.GetPosEnd(), fmt.Sprintf("Index %d out of bounds [%d..%d]", index, array.Start, array.End), context))
+	}
+
+	array.Elements[index-array.Start] = value
+	return res.Success(value)
+}
+
+func (i *Interpreter) VisitMemberAccessNode(node common.Expr, context *common.Context) common.Value {
+	res := &common.RTResult{}
+	accessNode := node.(common.MemberAccessNode)
+	object := res.Register(i.Visit(accessNode.Object, context))
+	if res.ShouldReturn() {
+		return res
+	}
+
+	structVal, ok := object.(common.Struct)
+	if !ok {
+		return res.Failure(common.RTError(*accessNode.Object.GetPosStart(), *accessNode.Object.GetPosEnd(), "Object is not a struct", context))
+	}
+
+	val, ok := structVal.Fields[accessNode.MemberTok.Value]
+	if !ok {
+		return res.Failure(common.RTError(*accessNode.MemberTok.Pos_Start, *accessNode.MemberTok.Pos_End, fmt.Sprintf("Field '%s' not found in struct", accessNode.MemberTok.Value), context))
+	}
+
+	return res.Success(val)
+}
+
+func (i *Interpreter) VisitMemberAssignNode(node common.Expr, context *common.Context) common.Value {
+	res := &common.RTResult{}
+	assignNode := node.(common.MemberAssignNode)
+
+	object := res.Register(i.Visit(assignNode.MemberAccess.Object, context))
+	if res.ShouldReturn() {
+		return res
+	}
+
+	value := res.Register(i.Visit(assignNode.ValueNode, context))
+	if res.ShouldReturn() {
+		return res
+	}
+
+	structVal, ok := object.(common.Struct)
+	if !ok {
+		return res.Failure(common.RTError(*assignNode.MemberAccess.Object.GetPosStart(), *assignNode.MemberAccess.Object.GetPosEnd(), "Object is not a struct", context))
+	}
+
+	if _, ok := structVal.Fields[assignNode.MemberAccess.MemberTok.Value]; !ok {
+		return res.Failure(common.RTError(*assignNode.MemberAccess.MemberTok.Pos_Start, *assignNode.MemberAccess.MemberTok.Pos_End, fmt.Sprintf("Field '%s' not found in struct", assignNode.MemberAccess.MemberTok.Value), context))
+	}
+
+	structVal.Fields[assignNode.MemberAccess.MemberTok.Value] = value
+	return res.Success(value)
+}
+
+func (i *Interpreter) VisitTypeAliasNode(node common.Expr, context *common.Context) common.Value {
+	res := &common.RTResult{}
+	aliasNode := node.(common.TypeAliasNode)
+	typeValue := common.Type{
+		Definition: aliasNode.TargetType,
+		Context:    context,
+		Pos_Start:  aliasNode.Pos_Start,
+		Pos_End:    aliasNode.Pos_End,
+	}
+	context.Symbol_Table.Set(aliasNode.AliasName.Value, typeValue)
+	return res.Success(common.Null{})
+}
+
+func (i *Interpreter) VisitStructTypeNode(node common.Expr, context *common.Context) common.Value {
+	res := &common.RTResult{}
+	structNode := node.(common.StructTypeNode)
+	typeValue := common.Type{
+		Definition: structNode,
+		Context:    context,
+		Pos_Start:  structNode.Pos_Start,
+		Pos_End:    structNode.Pos_End,
+	}
+	context.Symbol_Table.Set(structNode.StructName.Value, typeValue)
+	return res.Success(common.Null{})
+}
+
+func (i *Interpreter) InitializeType(typeNode common.Expr, context *common.Context) common.Value {
+	res := &common.RTResult{}
+
+	switch t := typeNode.(type) {
+	case common.VarAccessNode:
+		typeName := t.VarNameTok.Value
+		switch typeName {
+		case "integer", "real":
+			return res.Success(common.Number{Value: 0, Context: context})
+		case "string":
+			return res.Success(common.String{Value: "", Context: context})
+		default:
+			val := context.Symbol_Table.Get(typeName)
+			if typeDef, ok := val.(common.Type); ok {
+				return i.InitializeType(typeDef.Definition, context)
+			}
+			return res.Failure(common.RTError(*t.GetPosStart(), *t.GetPosEnd(), fmt.Sprintf("Unknown type '%s'", typeName), context))
+		}
+	case common.ArrayTypeNode:
+		startVal := res.Register(i.Visit(t.StartNode, context))
+		if res.ShouldReturn() {
+			return res
+		}
+		endVal := res.Register(i.Visit(t.EndNode, context))
+		if res.ShouldReturn() {
+			return res
+		}
+
+		start := int(startVal.(common.Number).Value)
+		end := int(endVal.(common.Number).Value)
+		size := end - start + 1
+		elements := make([]common.Value, size)
+
+		for idx := 0; idx < size; idx++ {
+			elemVal := res.Register(i.InitializeType(t.OfType, context))
+			if res.ShouldReturn() {
+				return res
+			}
+			elements[idx] = elemVal
+		}
+
+		return res.Success(common.Array{
+			Elements:  elements,
+			Start:     start,
+			End:       end,
+			Context:   context,
+			Pos_Start: t.Pos_Start,
+			Pos_End:   t.Pos_End,
+		})
+	case common.StructTypeNode:
+		fields := make(map[string]common.Value)
+		for _, field := range t.Fields {
+			fieldVal := res.Register(i.InitializeType(field.ValueNode, context))
+			if res.ShouldReturn() {
+				return res
+			}
+			fields[field.VarName.Value] = fieldVal
+		}
+		return res.Success(common.Struct{
+			Fields:    fields,
+			Context:   context,
+			Pos_Start: t.Pos_Start,
+			Pos_End:   t.Pos_End,
+		})
+	}
 
 	return res.Success(common.Null{})
 }
