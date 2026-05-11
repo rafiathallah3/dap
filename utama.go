@@ -9,8 +9,6 @@ import (
 	"dap/tools"
 	"fmt"
 	"os"
-
-	"github.com/sanity-io/litter"
 )
 
 /*
@@ -42,7 +40,11 @@ var globalSymbolTable = &common.SymbolTable{
 }
 
 func JalaninProgram(source string, fileName string, ApakahSatuBaris bool) {
-	tokens := lexer.Tokenize(source, fileName)
+	tokens, err := lexer.Tokenize(source, fileName)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
 	if TunjuinToken {
 		fmt.Println("########   TOKEN   #########")
@@ -63,7 +65,7 @@ func JalaninProgram(source string, fileName string, ApakahSatuBaris bool) {
 		fmt.Println(Ast.Error.As_string())
 	} else {
 		if TunjuinAST {
-			litter.Dump(Ast.Node)
+			common.PrintTreeAST(Ast.Node, "", true)
 		}
 
 		inter := interpreter.Interpreter{}
@@ -88,6 +90,9 @@ func main() {
 	globalSymbolTable.Set("null", common.Null{})
 	globalSymbolTable.Set("true", common.Number{Value: 1})
 	globalSymbolTable.Set("false", common.Number{Value: 0})
+	globalSymbolTable.Set("integer", common.Number{Value: 0})
+	globalSymbolTable.Set("real", common.Number{Value: 0})
+	globalSymbolTable.Set("string", common.String{Value: ""})
 
 	for Keyword, NamaFunction := range tools.SemuaBuiltInFunction {
 		globalSymbolTable.Set(Keyword, common.BuiltInFunction{
@@ -99,7 +104,7 @@ func main() {
 
 	fileName := ""
 	for i, command := range os.Args {
-		if i == 1 && command[:2] != "--" {
+		if i == 1 && (len(command) < 2 || command[:2] != "--") {
 			fileName = command
 		}
 
@@ -110,11 +115,24 @@ func main() {
 		if command == "--show-ast" {
 			TunjuinAST = true
 		}
+
+		if command == "--help" || command == "-h" {
+			fmt.Println("DAP, A friendly Pseudocode for you to learn basic logic")
+			fmt.Println("Usage:")
+			fmt.Println("  dap [file.dap]    Run a DAP program file")
+			fmt.Println("  dap               Enter interactive console mode")
+			fmt.Println("")
+			fmt.Println("Options:")
+			fmt.Println("  --show-token      Show tokens during execution")
+			fmt.Println("  --show-ast        Show abstract syntax tree during execution")
+			fmt.Println("  --help, -h        Show this help message")
+			os.Exit(0)
+		}
 	}
 
 	if fileName == "" {
 		scanner := bufio.NewScanner(os.Stdin)
-		fmt.Println("Welcome to DAP. Friendly Psuedocode.")
+		fmt.Println("Welcome to DAP. Friendly Pseudocode.")
 		fmt.Println("Type `help` for information.")
 
 		for {
@@ -127,11 +145,12 @@ func main() {
 			}
 
 			if text == "exit" || text == "exit()" {
-				os.Exit(1)
+				fmt.Println("Jumpe lagi!")
+				os.Exit(0)
 			}
 
 			if text == "help" {
-				fmt.Println("This is DAP! A friendly Psuedocode for you to learn basic logic made by Rafi")
+				fmt.Println("DAP, A friendly Pseudocode for you to learn basic logic")
 				fmt.Println("To run the command `dap [NameOfAFile.dap]` Without the namefile would access to console")
 				fmt.Println("Extra command")
 				fmt.Println(" --show-token | Showing the Token")
@@ -143,10 +162,11 @@ func main() {
 		}
 	}
 
-	bytes, err := os.ReadFile(fmt.Sprintf("./%s", fileName))
+	bytes, err := os.ReadFile(fileName)
 
 	if err != nil {
-		panic(fmt.Sprintf("File %s not found!", fileName))
+		fmt.Fprintf(os.Stderr, "Error: File '%s' not found or cannot be read.\n", fileName)
+		os.Exit(1)
 	}
 
 	source := string(bytes)
