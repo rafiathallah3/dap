@@ -19,21 +19,26 @@ algorithm
 endprogram
 ```
 
-## How to download:
-Clone the repository
-```
-git clone https://github.com/rafiathallah3/dap.git
-```
-Change directory
-```
-cd dap
-```
+## Installation
 
-Install Golang module.
-```
-go install
-```
-Run.
-```
-dap ThisIsAProgram.dap
-```
+1. Clone the repository:
+   ```powershell
+   git clone https://github.com/rafiathallah3/dap.git
+   cd dap
+   ```
+
+2. Run the installer script (Windows):
+   ```powershell
+   .\install.ps1
+   ```
+
+3. Open a **new** terminal window and run:
+   ```powershell
+   dap
+   ```
+
+## Usage
+- Enter Console Mode: `dap`
+- Run a File: `dap program.dap`
+- Show Tokens: `dap program.dap --show-token`
+- Show AST: `dap program.dap --show-ast`
