@@ -32,7 +32,7 @@ func (n Token) GetPosStart() *tools.Position {
 	return n.Pos_Start
 }
 func (n Token) GetPosEnd() *tools.Position {
-	return n.Pos_Start
+	return n.Pos_End
 }
 
 type ParseResult struct {
@@ -113,5 +113,5 @@ func (n *ParseResult) GetPosStart() *tools.Position {
 	return n.Pos_Start
 }
 func (n *ParseResult) GetPosEnd() *tools.Position {
-	return n.Pos_Start
+	return n.Pos_End
 }

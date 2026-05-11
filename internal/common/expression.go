@@ -40,14 +40,107 @@ func PrintValueAST(n Expr) string {
 
 		return fmt.Sprintf("FOR %s TO %s STEP %s DO %s", PrintValueAST(n.StartValueNode), PrintValueAST(n.EndValueNode), PrintValueAST(n.StepValueNode), PrintValueAST(n.BodyNode))
 	case WhileNode:
-		return fmt.Sprintf("WHIEL %s DO %s", PrintValueAST(n.KondisiNode), PrintValueAST(n.BodyNode))
+		return fmt.Sprintf("WHILE %s DO %s", PrintValueAST(n.KondisiNode), PrintValueAST(n.BodyNode))
 	case RepeatNode:
 		return fmt.Sprintf("REPEAT %s UNTIL %s", PrintValueAST(n.BodyNode), PrintValueAST(n.KondisiNode))
+	case ArrayTypeNode:
+		return fmt.Sprintf("ARRAY[%s..%s] OF %s", PrintValueAST(n.StartNode), PrintValueAST(n.EndNode), PrintValueAST(n.OfType))
+	case ArrayIndexNode:
+		return fmt.Sprintf("%s[%s]", PrintValueAST(n.Left), PrintValueAST(n.Index))
+	case ArrayAssignNode:
+		return fmt.Sprintf("%s <- %s", PrintValueAST(n.ArrayAccess), PrintValueAST(n.ValueNode))
+	case MemberAccessNode:
+		return fmt.Sprintf("%s.%s", PrintValueAST(n.Object), n.MemberTok.Value)
+	case MemberAssignNode:
+		return fmt.Sprintf("%s <- %s", PrintValueAST(n.MemberAccess), PrintValueAST(n.ValueNode))
+	case TypeAliasNode:
+		return fmt.Sprintf("TYPE %s: %s", n.AliasName.Value, PrintValueAST(n.TargetType))
+	case StructTypeNode:
+		return fmt.Sprintf("TYPE %s < STRUCT >", n.StructName.Value)
+	case CallNode:
+		hasil := PrintValueAST(n.NodeToCall) + "("
+		for i, v := range n.ArgNodes {
+			hasil += PrintValueAST(v)
+			if i < len(n.ArgNodes)-1 {
+				hasil += ", "
+			}
+		}
+		return hasil + ")"
+	case FuncNode:
+		return fmt.Sprintf("FUNCTION %s", n.VarNameTok.Value)
 	case *ParseResult:
 		return PrintValueAST(n.Node)
 	}
 
 	return ""
+}
+
+type TypeAliasNode struct {
+	AliasName  lexer.Token
+	TargetType Expr
+	Pos_Start  *tools.Position
+	Pos_End    *tools.Position
+}
+
+func (n TypeAliasNode) expr()         {}
+func (n TypeAliasNode) Print() string { return PrintValueAST(n) }
+func (n TypeAliasNode) Name() string  { return "TypeAliasNode" }
+func (n TypeAliasNode) GetPosStart() *tools.Position {
+	return n.Pos_Start
+}
+func (n TypeAliasNode) GetPosEnd() *tools.Position {
+	return n.Pos_End
+}
+
+type StructTypeNode struct {
+	StructName lexer.Token
+	Fields     []VarAssignNode // Reusing VarAssignNode to store field:type
+	Pos_Start  *tools.Position
+	Pos_End    *tools.Position
+}
+
+func (n StructTypeNode) expr()         {}
+func (n StructTypeNode) Print() string { return PrintValueAST(n) }
+func (n StructTypeNode) Name() string  { return "StructTypeNode" }
+func (n StructTypeNode) GetPosStart() *tools.Position {
+	return n.Pos_Start
+}
+func (n StructTypeNode) GetPosEnd() *tools.Position {
+	return n.Pos_End
+}
+
+type MemberAccessNode struct {
+	Object    Expr
+	MemberTok lexer.Token
+	Pos_Start *tools.Position
+	Pos_End   *tools.Position
+}
+
+func (n MemberAccessNode) expr()         {}
+func (n MemberAccessNode) Print() string { return PrintValueAST(n) }
+func (n MemberAccessNode) Name() string  { return "MemberAccessNode" }
+func (n MemberAccessNode) GetPosStart() *tools.Position {
+	return n.Pos_Start
+}
+func (n MemberAccessNode) GetPosEnd() *tools.Position {
+	return n.Pos_End
+}
+
+type MemberAssignNode struct {
+	MemberAccess MemberAccessNode
+	ValueNode    Expr
+	Pos_Start    *tools.Position
+	Pos_End      *tools.Position
+}
+
+func (n MemberAssignNode) expr()         {}
+func (n MemberAssignNode) Print() string { return PrintValueAST(n) }
+func (n MemberAssignNode) Name() string  { return "MemberAssignNode" }
+func (n MemberAssignNode) GetPosStart() *tools.Position {
+	return n.Pos_Start
+}
+func (n MemberAssignNode) GetPosEnd() *tools.Position {
+	return n.Pos_End
 }
 
 type NumberNode struct {
@@ -67,7 +160,7 @@ func (n NumberNode) GetPosStart() *tools.Position {
 	return n.Pos_Start
 }
 func (n NumberNode) GetPosEnd() *tools.Position {
-	return n.Pos_Start
+	return n.Pos_End
 }
 
 type StringNode struct {
@@ -87,7 +180,7 @@ func (n StringNode) GetPosStart() *tools.Position {
 	return n.Pos_Start
 }
 func (n StringNode) GetPosEnd() *tools.Position {
-	return n.Pos_Start
+	return n.Pos_End
 }
 
 type ListNode struct {
@@ -107,7 +200,7 @@ func (n ListNode) GetPosStart() *tools.Position {
 	return n.Pos_Start
 }
 func (n ListNode) GetPosEnd() *tools.Position {
-	return n.Pos_Start
+	return n.Pos_End
 }
 
 type NullNode struct {
@@ -127,7 +220,7 @@ func (n NullNode) GetPosStart() *tools.Position {
 	return n.Pos_Start
 }
 func (n NullNode) GetPosEnd() *tools.Position {
-	return n.Pos_Start
+	return n.Pos_End
 }
 
 type BinOpNode struct {
@@ -149,7 +242,7 @@ func (n BinOpNode) GetPosStart() *tools.Position {
 	return n.Pos_Start
 }
 func (n BinOpNode) GetPosEnd() *tools.Position {
-	return n.Pos_Start
+	return n.Pos_End
 }
 
 type UnaryOpNode struct {
@@ -164,13 +257,13 @@ func (n UnaryOpNode) Print() string {
 	return PrintValueAST(n)
 }
 func (n UnaryOpNode) Name() string {
-	return "NumberNode"
+	return "UnaryOpNode"
 }
 func (n UnaryOpNode) GetPosStart() *tools.Position {
 	return n.Pos_Start
 }
 func (n UnaryOpNode) GetPosEnd() *tools.Position {
-	return n.Pos_Start
+	return n.Pos_End
 }
 
 type VarAssignNode struct {
@@ -464,4 +557,68 @@ func (n DictionaryNode) GetPosStart() *tools.Position {
 }
 func (n DictionaryNode) GetPosEnd() *tools.Position {
 	return n.VariableDiBuat[len(n.VariableDiBuat)-1].GetPosEnd()
+}
+
+type ArrayTypeNode struct {
+	StartNode Expr
+	EndNode   Expr
+	OfType    Expr
+	Pos_Start *tools.Position
+	Pos_End   *tools.Position
+}
+
+func (n ArrayTypeNode) expr() {}
+func (n ArrayTypeNode) Print() string {
+	return PrintValueAST(n)
+}
+func (n ArrayTypeNode) Name() string {
+	return "ArrayTypeNode"
+}
+func (n ArrayTypeNode) GetPosStart() *tools.Position {
+	return n.Pos_Start
+}
+func (n ArrayTypeNode) GetPosEnd() *tools.Position {
+	return n.Pos_End
+}
+
+type ArrayIndexNode struct {
+	Left      Expr
+	Index     Expr
+	Pos_Start *tools.Position
+	Pos_End   *tools.Position
+}
+
+func (n ArrayIndexNode) expr() {}
+func (n ArrayIndexNode) Print() string {
+	return PrintValueAST(n)
+}
+func (n ArrayIndexNode) Name() string {
+	return "ArrayIndexNode"
+}
+func (n ArrayIndexNode) GetPosStart() *tools.Position {
+	return n.Pos_Start
+}
+func (n ArrayIndexNode) GetPosEnd() *tools.Position {
+	return n.Pos_End
+}
+
+type ArrayAssignNode struct {
+	ArrayAccess ArrayIndexNode
+	ValueNode   Expr
+	Pos_Start   *tools.Position
+	Pos_End     *tools.Position
+}
+
+func (n ArrayAssignNode) expr() {}
+func (n ArrayAssignNode) Print() string {
+	return PrintValueAST(n)
+}
+func (n ArrayAssignNode) Name() string {
+	return "ArrayAssignNode"
+}
+func (n ArrayAssignNode) GetPosStart() *tools.Position {
+	return n.Pos_Start
+}
+func (n ArrayAssignNode) GetPosEnd() *tools.Position {
+	return n.Pos_End
 }

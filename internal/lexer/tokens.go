@@ -85,6 +85,9 @@ const (
 	INTEGER
 	REAL
 	STRINGTYPE
+	ARRAY
+	OF
+	TYPE
 )
 
 var reserved_lu map[string]TokenKind = map[string]TokenKind{
@@ -119,6 +122,9 @@ var reserved_lu map[string]TokenKind = map[string]TokenKind{
 	"integer":    INTEGER,
 	"real":       REAL,
 	"string":     STRINGTYPE,
+	"array":      ARRAY,
+	"of":         OF,
+	"type":       TYPE,
 }
 
 type Token struct {
@@ -127,20 +133,6 @@ type Token struct {
 	Pos_Start *tools.Position
 	Pos_End   *tools.Position
 }
-
-// func (token Token) expr() {}
-// func (token Token) Print() string {
-// 	return token.Value
-// }
-// func (n Token) Name() string {
-// 	return "Token"
-// }
-// func (n Token) GetPosStart() *tools.Position {
-// 	return n.Pos_Start
-// }
-// func (n Token) GetPosEnd() *tools.Position {
-// 	return n.Pos_Start
-// }
 
 func (token Token) IsOneOfMany(expectedTokens ...TokenKind) bool {
 	for _, expectedToken := range expectedTokens {
@@ -319,6 +311,12 @@ func TokenKindString(kind TokenKind) string {
 		return "REAL"
 	case STRINGTYPE:
 		return "STRING TYPE"
+	case ARRAY:
+		return "ARRAY"
+	case OF:
+		return "OF"
+	case TYPE:
+		return "TYPE"
 	default:
 		return "UNKNOWN"
 	}
