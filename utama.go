@@ -35,6 +35,7 @@ endprogram
 
 var TunjuinToken = false
 var TunjuinAST = false
+var TunjuinASTJSON = false
 var globalSymbolTable = &common.SymbolTable{
 	Symbols: make(map[string]common.Value),
 }
@@ -66,6 +67,9 @@ func JalaninProgram(source string, fileName string, ApakahSatuBaris bool) {
 	} else {
 		if TunjuinAST {
 			common.PrintTreeAST(Ast.Node, "", true)
+		} else if TunjuinASTJSON {
+			common.PrintJSONAST(Ast.Node)
+			return
 		}
 
 		inter := interpreter.Interpreter{}
@@ -75,7 +79,7 @@ func JalaninProgram(source string, fileName string, ApakahSatuBaris bool) {
 
 		context.Symbol_Table = globalSymbolTable
 
-		if TunjuinAST || TunjuinToken {
+		if TunjuinAST || TunjuinASTJSON || TunjuinToken {
 			fmt.Println("########   RESULT   #########")
 		}
 
@@ -116,6 +120,10 @@ func main() {
 			TunjuinAST = true
 		}
 
+		if command == "--show-ast-json" {
+			TunjuinASTJSON = true
+		}
+
 		if command == "--help" || command == "-h" {
 			fmt.Println("DAP, A friendly Pseudocode for you to learn basic logic")
 			fmt.Println("Usage:")
@@ -125,6 +133,7 @@ func main() {
 			fmt.Println("Options:")
 			fmt.Println("  --show-token      Show tokens during execution")
 			fmt.Println("  --show-ast        Show abstract syntax tree during execution")
+			fmt.Println("  --show-ast-json   Show abstract syntax tree in JSON format during execution")
 			fmt.Println("  --help, -h        Show this help message")
 			os.Exit(0)
 		}
@@ -155,6 +164,7 @@ func main() {
 				fmt.Println("Extra command")
 				fmt.Println(" --show-token | Showing the Token")
 				fmt.Println(" --show-AST | Showing the AST")
+				fmt.Println(" --show-ast-json | Showing the AST in JSON format")
 				continue
 			}
 
