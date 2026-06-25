@@ -331,6 +331,7 @@ func (s String) Multed_by(other Value) (Value, *Error) {
 
 type Number struct {
 	Value     float64
+	IsReal    bool
 	Context   *Context
 	Pos_Start *tools.Position
 	Pos_End   *tools.Position
@@ -358,6 +359,7 @@ func (n Number) Get_context() *Context {
 func (n Number) Copy() Value {
 	return Number{
 		Value:     n.Value,
+		IsReal:    n.IsReal,
 		Pos_Start: n.Pos_Start,
 		Pos_End:   n.Pos_End,
 		Context:   n.Context,
@@ -367,7 +369,7 @@ func (n Number) Copy() Value {
 func (n Number) Added_to(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Number{Value: n.Value + other.Value}.Set_context(n.Context), nil
+		return Number{Value: n.Value + other.Value, IsReal: n.IsReal || other.IsReal}.Set_context(n.Context), nil
 	}
 
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform addition with the given type", n.Context)
@@ -377,7 +379,7 @@ func (n Number) Added_to(other Value) (Value, *Error) {
 func (n Number) Subbed_by(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Number{Value: n.Value - other.Value}.Set_context(n.Context), nil
+		return Number{Value: n.Value - other.Value, IsReal: n.IsReal || other.IsReal}.Set_context(n.Context), nil
 	}
 
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform subtraction with the given type", n.Context)
@@ -387,7 +389,7 @@ func (n Number) Subbed_by(other Value) (Value, *Error) {
 func (n Number) Multed_by(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Number{Value: n.Value * other.Value}.Set_context(n.Context), nil
+		return Number{Value: n.Value * other.Value, IsReal: n.IsReal || other.IsReal}.Set_context(n.Context), nil
 	}
 
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform multiplication with the given type", n.Context)
@@ -401,7 +403,21 @@ func (n Number) Divided_by(other Value) (Value, *Error) {
 			err := RTError(*other.Pos_Start, *other.Pos_End, "Division by zero", n.Context)
 			return other, &err
 		}
-		return Number{Value: n.Value / other.Value}.Set_context(n.Context), nil
+		return Number{Value: n.Value / other.Value, IsReal: true}.Set_context(n.Context), nil
+	}
+
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform division with the given type", n.Context)
+	return nil, &err
+}
+
+func (n Number) DivBy(other Value) (Value, *Error) {
+	switch other := other.(type) {
+	case Number:
+		if other.Value == 0 {
+			err := RTError(*other.Pos_Start, *other.Pos_End, "Division by zero", n.Context)
+			return other, &err
+		}
+		return Number{Value: math.Floor(n.Value / other.Value), IsReal: false}.Set_context(n.Context), nil
 	}
 
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform division with the given type", n.Context)
@@ -411,7 +427,7 @@ func (n Number) Divided_by(other Value) (Value, *Error) {
 func (n Number) Powered_by(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Number{Value: math.Pow(n.Value, other.Value)}.Set_context(n.Context), nil
+		return Number{Value: math.Pow(n.Value, other.Value), IsReal: n.IsReal || other.IsReal}.Set_context(n.Context), nil
 	}
 
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform exponentiation with the given type", n.Context)
@@ -804,12 +820,33 @@ func (n BuiltInFunction) ExecuteInput() ([]string, func(*Context, []Expr) Value)
 				var s string
 				fmt.Scan(&s)
 
+				varName := rawArgs.VarNameTok.Value
+				declaredTypeVal := ctx.Symbol_Table.Get("VariableType " + varName)
+				var declaredTypeStr string
+				if declaredTypeVal != nil {
+					if sVal, ok := declaredTypeVal.(String); ok {
+						declaredTypeStr = sVal.Value
+					}
+				}
+
 				if parseFloat, err := strconv.ParseFloat(s, 64); err == nil {
-					ctx.Symbol_Table.Set(rawArgs.VarNameTok.Value, Number{Value: parseFloat, Context: ctx})
+					isReal := strings.Contains(s, ".")
+					if declaredTypeStr == "integer" {
+						if isReal || parseFloat != math.Floor(parseFloat) {
+							errNya := RTError(*n.Pos_Start, *n.Pos_End, fmt.Sprintf("Type mismatch: cannot assign real number to integer variable '%s'", varName), ctx)
+							return res.Failure(errNya)
+						}
+					}
+					ctx.Symbol_Table.Set(varName, Number{Value: parseFloat, IsReal: isReal, Context: ctx})
 					continue
 				}
 
-				ctx.Symbol_Table.Set(rawArgs.VarNameTok.Value, String{Value: s})
+				if declaredTypeStr == "integer" {
+					errNya := RTError(*n.Pos_Start, *n.Pos_End, fmt.Sprintf("Type mismatch: cannot assign string to integer variable '%s'", varName), ctx)
+					return res.Failure(errNya)
+				}
+
+				ctx.Symbol_Table.Set(varName, String{Value: s})
 			default:
 				return res.Failure(RTError(*n.Pos_Start, *n.Pos_End, "Parameter must be a Variable access node", ctx))
 			}

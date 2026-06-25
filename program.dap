@@ -1,8 +1,16 @@
 program HowManyAreYou
 dictionary
     const pi = 3.14
+    x : integer
+    y : real
 algorithm
     print "[11/05/2026 19:22]"
+
+    x <- 5
+    y <- 2.5
+
+    z <- x / y
+    print z
 
     print pi
 endprogram

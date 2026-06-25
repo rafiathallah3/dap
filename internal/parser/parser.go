@@ -225,10 +225,11 @@ func (p *parser) dictionary_expr() common.Expr {
 
 			for _, val := range ListVarNameToks {
 				IsiNode = append(IsiNode, common.VarAssignNode{
-					VarName:   val,
-					ValueNode: tipeDataNode,
-					Pos_Start: val.Pos_Start,
-					Pos_end:   tipeDataNode.GetPosEnd(),
+					VarName:         val,
+					ValueNode:       tipeDataNode,
+					ApakahDeklarasi: true,
+					Pos_Start:       val.Pos_Start,
+					Pos_end:         tipeDataNode.GetPosEnd(),
 				})
 			}
 		} else if p.currentToken().Kind == lexer.CONST {
@@ -1190,7 +1191,7 @@ func (p *parser) factor() common.Expr {
 }
 
 func (p *parser) term() common.Expr {
-	return p.bin_op(p.factor, []lexer.TokenKind{lexer.STAR, lexer.SLASH}, p.factor)
+	return p.bin_op(p.factor, []lexer.TokenKind{lexer.STAR, lexer.SLASH, lexer.DIV}, p.factor)
 }
 
 func (p *parser) arith_expr() common.Expr {

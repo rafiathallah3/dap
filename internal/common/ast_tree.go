@@ -193,6 +193,7 @@ func ASTToMap(node Expr) interface{} {
 		res["name"] = n.VarName.Value
 		res["value"] = ASTToMap(n.ValueNode)
 		res["is_const"] = n.ApakahConst
+		res["is_declaration"] = n.ApakahDeklarasi
 	case ListNode:
 		var program []interface{}
 		for _, el := range n.ElementNode {

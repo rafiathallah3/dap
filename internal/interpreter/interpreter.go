@@ -5,8 +5,10 @@ import (
 	"dap/internal/lexer"
 	"dap/tools"
 	"fmt"
+	"math"
 	"reflect"
 	"strconv"
+	"strings"
 )
 
 type Interpreter struct{}
@@ -46,6 +48,7 @@ func (i *Interpreter) VisitNumberNode(node common.Expr, context *common.Context)
 
 	numberValue := common.Number{
 		Value:   parseFloat,
+		IsReal:  strings.Contains(nodeToken.Value, "."),
 		Context: context,
 	}
 
@@ -132,6 +135,16 @@ func (i *Interpreter) VisitVarAssignNode(node common.Expr, context *common.Conte
 		}
 	}
 
+	if nodeVarAssignNode.ApakahDeklarasi {
+		baseTypeName, err := i.GetBaseTypeName(nodeVarAssignNode.ValueNode, context)
+		if err != nil {
+			return res.Failure(*err)
+		}
+		if baseTypeName != "" {
+			context.Symbol_Table.Set("VariableType "+nodeVarAssignNode.VarName.Value, common.String{Value: baseTypeName})
+		}
+	}
+
 	res.Register(i.GantiVariable(nodeVarAssignNode.VarName.Value, value, context, nodeVarAssignNode.ApakahConst, nodeVarAssignNode.Pos_Start.Copy(), nodeVarAssignNode.Pos_end.Copy()))
 	if res.Error != nil {
 		return res
@@ -169,6 +182,8 @@ func (i *Interpreter) VisitBinOpNode(node common.Expr, context *common.Context) 
 			hasil, err = left.Multed_by(right)
 		case lexer.SLASH:
 			hasil, err = left.Divided_by(right)
+		case lexer.DIV:
+			hasil, err = left.DivBy(right)
 		case lexer.POWER:
 			hasil, err = left.Powered_by(right)
 		case lexer.EQUALS:
@@ -228,7 +243,8 @@ func (i *Interpreter) VisitUnaryOpNode(node common.Expr, context *common.Context
 	switch nodeUnary.Operator.Kind {
 	case lexer.DASH:
 		angka := common.Number{
-			Value: -1,
+			Value:  -1,
+			IsReal: number.(common.Number).IsReal,
 		}
 		number, error = number.(common.Number).Multed_by(angka)
 	case lexer.NOT:
@@ -300,7 +316,7 @@ func (i *Interpreter) VisitForNode(node common.Expr, context *common.Context) co
 	var stepValue common.Number
 	switch nodeFor.StepValueNode.(type) {
 	case common.NullNode:
-		stepValue = common.Number{Value: 1}
+		stepValue = common.Number{Value: 1, IsReal: false}
 	default:
 		stepValue = res.Register(i.Visit(nodeFor.StepValueNode, context)).(common.Number)
 
@@ -323,7 +339,7 @@ func (i *Interpreter) VisitForNode(node common.Expr, context *common.Context) co
 	}
 
 	for kondisi(iteration, int(endValue.Value)) {
-		res.Register(i.GantiVariable(nodeFor.VarNameTok.Value, common.Number{Value: float64(iteration)}, context, false, nodeFor.VarNameTok.Pos_Start.Copy(), nodeFor.VarNameTok.Pos_End.Copy()))
+		res.Register(i.GantiVariable(nodeFor.VarNameTok.Value, common.Number{Value: float64(iteration), IsReal: false}, context, false, nodeFor.VarNameTok.Pos_Start.Copy(), nodeFor.VarNameTok.Pos_End.Copy()))
 		if res.Error != nil {
 			return res
 		}
@@ -601,11 +617,46 @@ func (i *Interpreter) GantiVariable(varName string, value common.Value, context 
 			hasil = 1.0
 		}
 
-		context.Symbol_Table.Set("ApakahKonstant "+varName, common.Number{Value: hasil})
+		context.Symbol_Table.Set("ApakahKonstant "+varName, common.Number{Value: hasil, IsReal: false})
 	}
 
 	if apakahAdaKonst != nil && apakahAdaKonst.(common.Number).Value == 1 {
-		return res.Failure(common.RTError(*posStart, *posend, fmt.Sprintf("Constant variable '%s' can not be assigned!", varName), context))
+		var start, end tools.Position
+		if posStart != nil {
+			start = *posStart
+		}
+		if posend != nil {
+			end = *posend
+		}
+		return res.Failure(common.RTError(start, end, fmt.Sprintf("Constant variable '%s' can not be assigned!", varName), context))
+	}
+
+	// Check declared type of variable
+	declaredTypeVal := context.Symbol_Table.Get("VariableType " + varName)
+	if declaredTypeVal != nil {
+		if declaredTypeStr, ok := declaredTypeVal.(common.String); ok {
+			if declaredTypeStr.Value == "integer" {
+				// Variable is integer, check if assigned value is a real number
+				if num, ok := value.(common.Number); ok {
+					if num.IsReal || num.Value != math.Floor(num.Value) {
+						var start, end tools.Position
+						if posStart != nil {
+							start = *posStart
+						}
+						if posend != nil {
+							end = *posend
+						}
+						return res.Failure(common.RTError(start, end, fmt.Sprintf("Type mismatch: cannot assign real number to integer variable '%s'", varName), context))
+					}
+				}
+			} else if declaredTypeStr.Value == "real" {
+				// Variable is real, promote assigned number value to real
+				if num, ok := value.(common.Number); ok {
+					num.IsReal = true
+					value = num
+				}
+			}
+		}
 	}
 
 	context.Symbol_Table.Set(varName, value)
@@ -810,8 +861,10 @@ func (i *Interpreter) InitializeType(typeNode common.Expr, context *common.Conte
 	case common.VarAccessNode:
 		typeName := t.VarNameTok.Value
 		switch typeName {
-		case "integer", "real":
-			return res.Success(common.Number{Value: 0, Context: context})
+		case "integer":
+			return res.Success(common.Number{Value: 0, IsReal: false, Context: context})
+		case "real":
+			return res.Success(common.Number{Value: 0, IsReal: true, Context: context})
 		case "string":
 			return res.Success(common.String{Value: "", Context: context})
 		default:
@@ -870,4 +923,22 @@ func (i *Interpreter) InitializeType(typeNode common.Expr, context *common.Conte
 	}
 
 	return res.Success(common.Null{})
+}
+
+func (i *Interpreter) GetBaseTypeName(typeNode common.Expr, context *common.Context) (string, *common.Error) {
+	switch t := typeNode.(type) {
+	case common.VarAccessNode:
+		typeName := t.VarNameTok.Value
+		switch typeName {
+		case "integer", "real", "string":
+			return typeName, nil
+		default:
+			val := context.Symbol_Table.Get(typeName)
+			if typeDef, ok := val.(common.Type); ok {
+				return i.GetBaseTypeName(typeDef.Definition, context)
+			}
+			return "", nil
+		}
+	}
+	return "", nil
 }

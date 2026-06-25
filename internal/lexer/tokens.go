@@ -54,6 +54,7 @@ const (
 	STAR
 	PERCENT
 	POWER
+	DIV
 
 	PROGRAM
 	DICTIONARY
@@ -125,6 +126,8 @@ var reserved_lu map[string]TokenKind = map[string]TokenKind{
 	"array":      ARRAY,
 	"of":         OF,
 	"type":       TYPE,
+	"div":        DIV,
+	"DIV":        DIV,
 }
 
 type Token struct {
@@ -251,6 +254,8 @@ func TokenKindString(kind TokenKind) string {
 		return "PERCENT"
 	case POWER:
 		return "POWER"
+	case DIV:
+		return "DIV"
 	case VAR:
 		return "VAR"
 	case CONST:
