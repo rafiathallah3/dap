@@ -64,14 +64,12 @@ func ApakahBuiltinFunction(s string) bool {
 }
 
 func FormatSyntaxError(pos Position, errorName string, details string) string {
-	// 1. Get the line of code
 	lines := strings.Split(strings.ReplaceAll(pos.Ftxt, "\r\n", "\n"), "\n")
 	lineText := ""
 	if pos.Ln >= 0 && pos.Ln < len(lines) {
 		lineText = lines[pos.Ln]
 	}
 
-	// 2. Generate caret spacing, replacing non-whitespace with spaces, preserving tabs
 	var caretSpacing strings.Builder
 	for i, r := range lineText {
 		if i >= pos.Col {
@@ -90,12 +88,13 @@ func FormatSyntaxError(pos Position, errorName string, details string) string {
 
 	// 3. Map DAP error names to Python-like equivalents and simplify verbose syntax error details
 	errName := errorName
-	if errName == "Invalid Syntax" {
+	switch errName {
+	case "Invalid Syntax":
 		errName = "SyntaxError"
 		if details == "" {
 			details = "invalid syntax"
 		}
-	} else if errName == "Illegal Character Error" {
+	case "Illegal Character Error":
 		errName = "SyntaxError"
 		if details == "" {
 			details = "illegal character"
@@ -109,7 +108,7 @@ func FormatSyntaxError(pos Position, errorName string, details string) string {
 		details = "invalid syntax"
 	}
 
-	msg := fmt.Sprintf("Traceback (most recent call last):\n")
+	msg := "Traceback (most recent call last):\n"
 	msg += fmt.Sprintf("  File \"%s\", line %d\n", pos.Fn, pos.Ln+1)
 	msg += fmt.Sprintf("    %s\n", lineText)
 	msg += fmt.Sprintf("    %s^\n", caretSpacing.String())
@@ -120,4 +119,3 @@ func FormatSyntaxError(pos Position, errorName string, details string) string {
 	}
 	return msg
 }
-
