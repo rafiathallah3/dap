@@ -531,15 +531,20 @@ func (i *Interpreter) VisitCallNode(node common.Expr, context *common.Context) c
 	switch value_to_call := value_to_call.(type) {
 	case common.BuiltInFunction:
 		returnValue = res.Register(value_to_call.Execute(args, rawArgs))
-		if returnValueContext := returnValue.Get_context(); returnValueContext != nil {
-			for _, v := range rawArgs {
-				switch v := v.(type) {
-				case common.VarAccessNode:
-					res.Register(i.GantiVariable(v.VarNameTok.Value, returnValueContext.Symbol_Table.Get(v.VarNameTok.Value), context, false, nil, nil))
-					if res.Error != nil {
-						return res
+		if res.ShouldReturn() {
+			return res
+		}
+		if returnValue != nil {
+			if returnValueContext := returnValue.Get_context(); returnValueContext != nil {
+				for _, v := range rawArgs {
+					switch v := v.(type) {
+					case common.VarAccessNode:
+						res.Register(i.GantiVariable(v.VarNameTok.Value, returnValueContext.Symbol_Table.Get(v.VarNameTok.Value), context, false, nil, nil))
+						if res.Error != nil {
+							return res
+						}
+						// context.Symbol_Table.Set(v.VarNameTok.Value, returnValueContext.Symbol_Table.Get(v.VarNameTok.Value))
 					}
-					// context.Symbol_Table.Set(v.VarNameTok.Value, returnValueContext.Symbol_Table.Get(v.VarNameTok.Value))
 				}
 			}
 		}

@@ -1237,6 +1237,26 @@ func (p *parser) statements() common.Expr {
 		p.advance()
 	}
 
+	isBlockEnding := func(kind lexer.TokenKind) bool {
+		return kind == lexer.EOF ||
+			kind == lexer.ENDPROGRAM ||
+			kind == lexer.ENDIF ||
+			kind == lexer.ENDWHILE ||
+			kind == lexer.ENDFOR ||
+			kind == lexer.END ||
+			kind == lexer.UNTIL ||
+			kind == lexer.ELSE ||
+			kind == lexer.ELIF
+	}
+
+	if isBlockEnding(p.currentToken().Kind) {
+		return res.Success(common.ListNode{
+			ElementNode: statements,
+			Pos_Start:   pos_start,
+			Pos_End:     p.currentToken().Pos_End.Copy(),
+		})
+	}
+
 	statement := res.Register(p.statement())
 	if res.Error != nil {
 		return res
@@ -1256,22 +1276,22 @@ func (p *parser) statements() common.Expr {
 			break
 		}
 
-		if p.currentToken().Kind == lexer.EOF || p.currentToken().Kind == lexer.ENDPROGRAM {
+		if isBlockEnding(p.currentToken().Kind) {
 			break
 		}
 
-		// Use a local result for this statement to avoid reversing everything if it fails
-		statementRes := &common.ParseResult{}
-		statement := statementRes.Try_register(p.statement())
-		res.Register_Advancement() 
-		
-		if statement == nil {
-			p.reverse(statementRes.ToReverseCount)
+		statementResult := p.statement().(*common.ParseResult)
+		if statementResult.Error != nil {
+			if statementResult.AdvanceCount > 0 || !isBlockEnding(p.currentToken().Kind) {
+				res.Register(statementResult)
+				return res
+			}
+			p.reverse(statementResult.AdvanceCount)
 			moreStatement = false
 			continue
 		}
-		res.AdvanceCount += statementRes.AdvanceCount
-		statements = append(statements, statement)
+		res.Register(statementResult)
+		statements = append(statements, statementResult.Node)
 	}
 
 	return res.Success(common.ListNode{

@@ -4,12 +4,12 @@ dictionary
     x : integer
     y : real
 algorithm
-    print "[11/05/2026 19:22]"
+    print "[26/06/2026 18:22]"
 
     x <- 5
     y <- 2.5
 
-    z <- x / y
+    z <- x /
     print z
 
     print pi

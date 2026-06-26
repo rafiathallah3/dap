@@ -763,7 +763,7 @@ func (n BuiltInFunction) Execute(args []Value, rawArgs []Expr) Value {
 		return res
 	}
 
-	if hasil.Get_context() != nil {
+	if hasil != nil && hasil.Get_context() != nil {
 		n.Context = hasil.Get_context()
 	}
 	return res.Success(hasil)

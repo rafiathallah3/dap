@@ -24,9 +24,7 @@ func (error Error) As_string() string {
 		return hasil
 	}
 
-	hasil := fmt.Sprintf("%s: %s\n", error.ErrorName, error.Details)
-	hasil += fmt.Sprintf("File %s, line %d", error.PosStart.Fn, error.PosStart.Ln+1)
-	return hasil
+	return tools.FormatSyntaxError(error.PosStart, error.ErrorName, error.Details)
 }
 
 func (error Error) generate_traceback() string {
