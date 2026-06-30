@@ -128,6 +128,8 @@ var reserved_lu map[string]TokenKind = map[string]TokenKind{
 	"type":       TYPE,
 	"div":        DIV,
 	"DIV":        DIV,
+	"mod":        PERCENT,
+	"MOD":        PERCENT,
 }
 
 type Token struct {

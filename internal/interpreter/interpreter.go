@@ -184,6 +184,8 @@ func (i *Interpreter) VisitBinOpNode(node common.Expr, context *common.Context) 
 			hasil, err = left.Divided_by(right)
 		case lexer.DIV:
 			hasil, err = left.DivBy(right)
+		case lexer.PERCENT:
+			hasil, err = left.ModBy(right)
 		case lexer.POWER:
 			hasil, err = left.Powered_by(right)
 		case lexer.EQUALS:

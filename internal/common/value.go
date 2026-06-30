@@ -424,6 +424,20 @@ func (n Number) DivBy(other Value) (Value, *Error) {
 	return nil, &err
 }
 
+func (n Number) ModBy(other Value) (Value, *Error) {
+	switch other := other.(type) {
+	case Number:
+		if other.Value == 0 {
+			err := RTError(*other.Pos_Start, *other.Pos_End, "Division by zero", n.Context)
+			return other, &err
+		}
+		return Number{Value: math.Mod(n.Value, other.Value), IsReal: n.IsReal || other.IsReal}.Set_context(n.Context), nil
+	}
+
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform modulo with the given type", n.Context)
+	return nil, &err
+}
+
 func (n Number) Powered_by(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:

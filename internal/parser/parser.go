@@ -1191,7 +1191,7 @@ func (p *parser) factor() common.Expr {
 }
 
 func (p *parser) term() common.Expr {
-	return p.bin_op(p.factor, []lexer.TokenKind{lexer.STAR, lexer.SLASH, lexer.DIV}, p.factor)
+	return p.bin_op(p.factor, []lexer.TokenKind{lexer.STAR, lexer.SLASH, lexer.DIV, lexer.PERCENT}, p.factor)
 }
 
 func (p *parser) arith_expr() common.Expr {
