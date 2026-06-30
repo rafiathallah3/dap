@@ -52,7 +52,11 @@ type Context struct {
 func PrintValueInterpreter(n Value) string {
 	switch n := n.(type) {
 	case Number:
-		return strconv.FormatFloat(n.Value, 'f', -1, 64)
+		s := strconv.FormatFloat(n.Value, 'f', -1, 64)
+		if n.IsReal && !strings.Contains(s, ".") && s != "NaN" && s != "+Inf" && s != "-Inf" && s != "Inf" {
+			return s + ".0"
+		}
+		return s
 	case String:
 		return n.Value
 	case List:
@@ -338,7 +342,7 @@ type Number struct {
 }
 
 func (n Number) Print() string {
-	return fmt.Sprintf("%f", n.Value)
+	return PrintValueInterpreter(n)
 }
 
 func (n Number) Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Value {
