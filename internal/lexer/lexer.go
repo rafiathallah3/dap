@@ -120,6 +120,14 @@ func createLexer(source string, fn string) *lexer {
 			{regexp.MustCompile(`"([^"\\]*(?:\\.[^"\\]*)*)"`), stringHandler},
 			{regexp.MustCompile(`"([^"\n\\]*(?:\\.[^"\n\\]*)*)`), unterminatedStringHandler},
 			{regexp.MustCompile(`\/\/.*`), skipHandler},
+			// Pascal-style block comments "{ ... }" (used throughout the
+			// student dataset, e.g. "{ Membaca input jumlah pelanggan }").
+			// OPEN_CURLY/CLOSE_CURLY below are otherwise unused by the
+			// parser, so treating a full "{...}" span as a skippable
+			// comment (like "//") is safe. Must come before the bare
+			// "{"/"}" patterns so a matched comment wins over the
+			// single-char token.
+			{regexp.MustCompile(`\{[^}]*\}`), skipHandler},
 			{regexp.MustCompile(`[ \t\r]+`), skipHandler},
 			{regexp.MustCompile(`\[`), defaultHandler(OPEN_BRACKET, "[")},
 			{regexp.MustCompile(`\]`), defaultHandler(CLOSE_BRACKET, "]")},
