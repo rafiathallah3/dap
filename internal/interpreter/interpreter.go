@@ -223,6 +223,17 @@ func (i *Interpreter) VisitBinOpNode(node common.Expr, context *common.Context) 
 		case lexer.SLASH:
 			hasil, err = left.Dived_by(right)
 		}
+	case common.Boolean:
+		switch nodeBinary.Operator.Kind {
+		case lexer.EQUALS:
+			hasil, err = left.Get_comparison_eq(right)
+		case lexer.NOT_EQUALS:
+			hasil, err = left.Get_comparison_nq(right)
+		case lexer.AND:
+			hasil, err = left.Anded_by(right)
+		case lexer.OR:
+			hasil, err = left.Ored_by(right)
+		}
 	}
 
 	if err != nil {
@@ -236,28 +247,43 @@ func (i *Interpreter) VisitUnaryOpNode(node common.Expr, context *common.Context
 	res := &common.RTResult{}
 	nodeUnary := node.(common.UnaryOpNode)
 
-	number := res.Register(i.Visit(nodeUnary.Node, context))
+	val := res.Register(i.Visit(nodeUnary.Node, context))
 	if res.ShouldReturn() {
 		return res
 	}
 
 	var error *common.Error
+	var resultVal common.Value
+
 	switch nodeUnary.Operator.Kind {
 	case lexer.DASH:
-		angka := common.Number{
-			Value:  -1,
-			IsReal: number.(common.Number).IsReal,
+		if num, ok := val.(common.Number); ok {
+			angka := common.Number{
+				Value:  -1,
+				IsReal: num.IsReal,
+			}
+			resultVal, error = num.Multed_by(angka)
+		} else {
+			errNya := common.RTError(*nodeUnary.Operator.Pos_Start, *nodeUnary.Operator.Pos_End, "Illegal operation: unary minus expects a number", context)
+			return res.Failure(errNya)
 		}
-		number, error = number.(common.Number).Multed_by(angka)
 	case lexer.NOT:
-		number, error = number.(common.Number).Notted()
+		switch v := val.(type) {
+		case common.Number:
+			resultVal, error = v.Notted()
+		case common.Boolean:
+			resultVal = common.Boolean{Value: !v.Value, Context: context, Pos_Start: v.Pos_Start, Pos_End: v.Pos_End}
+		default:
+			errNya := common.RTError(*nodeUnary.Operator.Pos_Start, *nodeUnary.Operator.Pos_End, "Illegal operation: logic not expects a boolean or number", context)
+			return res.Failure(errNya)
+		}
 	}
 
 	if error != nil {
 		return res.Failure(*error)
 	}
 
-	return res.Success(number.Set_pos(nodeUnary.Pos_Start, nodeUnary.Pos_End))
+	return res.Success(resultVal.Set_pos(nodeUnary.Pos_Start, nodeUnary.Pos_End))
 }
 
 func (i *Interpreter) VisitIfNode(node common.Expr, context *common.Context) common.Value {
@@ -884,6 +910,8 @@ func (i *Interpreter) InitializeType(typeNode common.Expr, context *common.Conte
 			return res.Success(common.Number{Value: 0, IsReal: true, Context: context})
 		case "string":
 			return res.Success(common.String{Value: "", Context: context})
+		case "boolean":
+			return res.Success(common.Boolean{Value: false, Context: context})
 		default:
 			val := context.Symbol_Table.Get(typeName)
 			if typeDef, ok := val.(common.Type); ok {
@@ -947,7 +975,7 @@ func (i *Interpreter) GetBaseTypeName(typeNode common.Expr, context *common.Cont
 	case common.VarAccessNode:
 		typeName := t.VarNameTok.Value
 		switch typeName {
-		case "integer", "real", "string":
+		case "integer", "real", "string", "boolean":
 			return typeName, nil
 		default:
 			val := context.Symbol_Table.Get(typeName)

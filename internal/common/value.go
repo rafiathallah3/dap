@@ -51,6 +51,11 @@ type Context struct {
 
 func PrintValueInterpreter(n Value) string {
 	switch n := n.(type) {
+	case Boolean:
+		if n.Value {
+			return "true"
+		}
+		return "false"
 	case Number:
 		s := strconv.FormatFloat(n.Value, 'f', -1, 64)
 		if n.IsReal && !strings.Contains(s, ".") && s != "NaN" && s != "+Inf" && s != "-Inf" && s != "Inf" {
@@ -142,6 +147,87 @@ func (n Null) Copy() Value {
 }
 func (n Null) Is_true() bool {
 	return false
+}
+
+type Boolean struct {
+	Value     bool
+	Context   *Context
+	Pos_Start *tools.Position
+	Pos_End   *tools.Position
+}
+
+func (b Boolean) Print() string {
+	if b.Value {
+		return "true"
+	}
+	return "false"
+}
+func (b Boolean) Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Value {
+	b.Pos_Start = Pos_Start
+	b.Pos_End = Pos_End
+	return b
+}
+func (b Boolean) Set_context(context *Context) Value {
+	b.Context = context
+	return b
+}
+func (b Boolean) Get_context() *Context {
+	return b.Context
+}
+func (b Boolean) Copy() Value {
+	return Boolean{
+		Value:     b.Value,
+		Pos_Start: b.Pos_Start,
+		Pos_End:   b.Pos_End,
+		Context:   b.Context,
+	}
+}
+func (b Boolean) Is_true() bool {
+	return b.Value
+}
+
+func (b Boolean) Get_comparison_eq(other Value) (Value, *Error) {
+	switch other := other.(type) {
+	case Boolean:
+		return Boolean{Value: b.Value == other.Value, Context: b.Context}.Set_pos(b.Pos_Start, b.Pos_End), nil
+	case Number:
+		return Boolean{Value: b.Value == (other.Value != 0), Context: b.Context}.Set_pos(b.Pos_Start, b.Pos_End), nil
+	}
+	err := RTError(safePos(b.Pos_Start), safePos(b.Pos_End), "Illegal operation: cannot compare equality with the given type", b.Context)
+	return nil, &err
+}
+
+func (b Boolean) Get_comparison_nq(other Value) (Value, *Error) {
+	switch other := other.(type) {
+	case Boolean:
+		return Boolean{Value: b.Value != other.Value, Context: b.Context}.Set_pos(b.Pos_Start, b.Pos_End), nil
+	case Number:
+		return Boolean{Value: b.Value != (other.Value != 0), Context: b.Context}.Set_pos(b.Pos_Start, b.Pos_End), nil
+	}
+	err := RTError(safePos(b.Pos_Start), safePos(b.Pos_End), "Illegal operation: cannot compare inequality with the given type", b.Context)
+	return nil, &err
+}
+
+func (b Boolean) Anded_by(other Value) (Value, *Error) {
+	switch other := other.(type) {
+	case Boolean:
+		return Boolean{Value: b.Value && other.Value, Context: b.Context}.Set_pos(b.Pos_Start, b.Pos_End), nil
+	case Number:
+		return Boolean{Value: b.Value && (other.Value != 0), Context: b.Context}.Set_pos(b.Pos_Start, b.Pos_End), nil
+	}
+	err := RTError(safePos(b.Pos_Start), safePos(b.Pos_End), "Illegal operation: cannot apply 'and' with the given type", b.Context)
+	return nil, &err
+}
+
+func (b Boolean) Ored_by(other Value) (Value, *Error) {
+	switch other := other.(type) {
+	case Boolean:
+		return Boolean{Value: b.Value || other.Value, Context: b.Context}.Set_pos(b.Pos_Start, b.Pos_End), nil
+	case Number:
+		return Boolean{Value: b.Value || (other.Value != 0), Context: b.Context}.Set_pos(b.Pos_Start, b.Pos_End), nil
+	}
+	err := RTError(safePos(b.Pos_Start), safePos(b.Pos_End), "Illegal operation: cannot apply 'or' with the given type", b.Context)
+	return nil, &err
 }
 
 type Array struct {
@@ -455,7 +541,9 @@ func (n Number) Powered_by(other Value) (Value, *Error) {
 func (n Number) Get_comparison_eq(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Number{Value: float64(tools.GetComparison(n.Value == other.Value))}.Set_context(n.Context), nil
+		return Boolean{Value: n.Value == other.Value, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
+	case Boolean:
+		return Boolean{Value: (n.Value != 0) == other.Value, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
 	}
 
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot compare equality with the given type", n.Context)
@@ -465,7 +553,9 @@ func (n Number) Get_comparison_eq(other Value) (Value, *Error) {
 func (n Number) Get_comparison_nq(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Number{Value: float64(tools.GetComparison(n.Value != other.Value))}.Set_context(n.Context), nil
+		return Boolean{Value: n.Value != other.Value, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
+	case Boolean:
+		return Boolean{Value: (n.Value != 0) != other.Value, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
 	}
 
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot compare inequality with the given type", n.Context)
@@ -475,7 +565,7 @@ func (n Number) Get_comparison_nq(other Value) (Value, *Error) {
 func (n Number) Get_comparison_lt(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Number{Value: float64(tools.GetComparison(n.Value < other.Value))}.Set_context(n.Context), nil
+		return Boolean{Value: n.Value < other.Value, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
 	}
 
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot compare with the given type", n.Context)
@@ -485,7 +575,7 @@ func (n Number) Get_comparison_lt(other Value) (Value, *Error) {
 func (n Number) Get_comparison_lte(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Number{Value: float64(tools.GetComparison(n.Value <= other.Value))}.Set_context(n.Context), nil
+		return Boolean{Value: n.Value <= other.Value, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
 	}
 
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot compare with the given type", n.Context)
@@ -495,7 +585,7 @@ func (n Number) Get_comparison_lte(other Value) (Value, *Error) {
 func (n Number) Get_comparison_gt(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Number{Value: float64(tools.GetComparison(n.Value > other.Value))}.Set_context(n.Context), nil
+		return Boolean{Value: n.Value > other.Value, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
 	}
 
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot compare with the given type", n.Context)
@@ -505,7 +595,7 @@ func (n Number) Get_comparison_gt(other Value) (Value, *Error) {
 func (n Number) Get_comparison_gte(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Number{Value: float64(tools.GetComparison(n.Value >= other.Value))}.Set_context(n.Context), nil
+		return Boolean{Value: n.Value >= other.Value, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
 	}
 
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot compare with the given type", n.Context)
@@ -515,7 +605,9 @@ func (n Number) Get_comparison_gte(other Value) (Value, *Error) {
 func (n Number) Anded_by(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Number{Value: float64(tools.GetComparison(n.Value != 0 && other.Value != 0))}.Set_context(n.Context), nil
+		return Boolean{Value: n.Value != 0 && other.Value != 0, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
+	case Boolean:
+		return Boolean{Value: n.Value != 0 && other.Value, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
 	}
 
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot apply 'and' with the given type", n.Context)
@@ -525,7 +617,9 @@ func (n Number) Anded_by(other Value) (Value, *Error) {
 func (n Number) Ored_by(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Number{Value: float64(tools.GetComparison(n.Value != 0 || other.Value != 0))}.Set_context(n.Context), nil
+		return Boolean{Value: n.Value != 0 || other.Value != 0, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
+	case Boolean:
+		return Boolean{Value: n.Value != 0 || other.Value, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
 	}
 
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot apply 'or' with the given type", n.Context)
@@ -533,12 +627,7 @@ func (n Number) Ored_by(other Value) (Value, *Error) {
 }
 
 func (n Number) Notted() (Value, *Error) {
-	hasil := 0
-	if n.Value == 0 {
-		hasil = 1
-	}
-
-	return Number{Value: float64(hasil)}.Set_context(n.Context), nil
+	return Boolean{Value: n.Value == 0, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
 }
 
 func (n Number) Is_true() bool {

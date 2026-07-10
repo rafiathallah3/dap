@@ -92,11 +92,12 @@ func JalaninProgram(source string, fileName string, ApakahSatuBaris bool) {
 
 func main() {
 	globalSymbolTable.Set("null", common.Null{})
-	globalSymbolTable.Set("true", common.Number{Value: 1, IsReal: false})
-	globalSymbolTable.Set("false", common.Number{Value: 0, IsReal: false})
+	globalSymbolTable.Set("true", common.Boolean{Value: true})
+	globalSymbolTable.Set("false", common.Boolean{Value: false})
 	globalSymbolTable.Set("integer", common.Number{Value: 0, IsReal: false})
 	globalSymbolTable.Set("real", common.Number{Value: 0, IsReal: true})
 	globalSymbolTable.Set("string", common.String{Value: ""})
+	globalSymbolTable.Set("boolean", common.Boolean{Value: false})
 
 	for Keyword, NamaFunction := range tools.SemuaBuiltInFunction {
 		globalSymbolTable.Set(Keyword, common.BuiltInFunction{

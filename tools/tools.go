@@ -49,14 +49,16 @@ func GetComparison(hasil bool) int {
 }
 
 var SemuaBuiltInFunction map[string]string = map[string]string{
-	"print": "Print",
-	"PRINT": "Print",
-	"write": "Print",
-	"WRITE": "Print",
-	"read":  "Input",
-	"READ":  "Input",
-	"input": "Input",
-	"INPUT": "Input",
+	"print":  "Print",
+	"PRINT":  "Print",
+	"write":  "Print",
+	"WRITE":  "Print",
+	"output": "Print",
+	"OUTPUT": "Print",
+	"read":   "Input",
+	"READ":   "Input",
+	"input":  "Input",
+	"INPUT":  "Input",
 }
 
 func ApakahBuiltinFunction(s string) bool {
