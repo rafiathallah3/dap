@@ -231,6 +231,7 @@ func ASTToMap(node Expr) interface{} {
 		res["end"] = ASTToMap(n.EndValueNode)
 		res["step"] = ASTToMap(n.StepValueNode)
 		res["body"] = ASTToMap(n.BodyNode)
+		res["is_down"] = n.IsDown
 	case RepeatNode:
 		res["body"] = ASTToMap(n.BodyNode)
 		res["condition"] = ASTToMap(n.KondisiNode)
