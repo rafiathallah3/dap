@@ -98,6 +98,7 @@ var reserved_lu map[string]TokenKind = map[string]TokenKind{
 	"program":    PROGRAM,
 	"endprogram": ENDPROGRAM,
 	"dictionary": DICTIONARY,
+	"kamus":      DICTIONARY,
 	"algorithm":  ALGORITHM,
 	"new":        NEW,
 	"repeat":     REPEAT,
@@ -130,6 +131,12 @@ var reserved_lu map[string]TokenKind = map[string]TokenKind{
 	"DIV":        DIV,
 	"mod":        PERCENT,
 	"MOD":        PERCENT,
+	"and":        AND,
+	"AND":        AND,
+	"or":         OR,
+	"OR":         OR,
+	"not":        NOT,
+	"NOT":        NOT,
 }
 
 type Token struct {

@@ -280,6 +280,9 @@ func (n VarAssignNode) Print() string {
 	return PrintValueAST(n)
 }
 func (n VarAssignNode) Name() string {
+	if n.ApakahDeklarasi || n.ApakahConst {
+		return "VarDeclNode"
+	}
 	return "VarAssignNode"
 }
 func (n VarAssignNode) GetPosStart() *tools.Position {

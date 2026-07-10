@@ -622,6 +622,9 @@ func (i *Interpreter) GantiVariable(varName string, value common.Value, context 
 		hasil := 0.0
 		if apakahKonst {
 			hasil = 1.0
+			if posStart != nil {
+				context.Symbol_Table.Set("ConstDeclLine "+varName, common.Number{Value: float64(posStart.Ln + 1), IsReal: false})
+			}
 		}
 
 		context.Symbol_Table.Set("ApakahKonstant "+varName, common.Number{Value: hasil, IsReal: false})
@@ -635,7 +638,14 @@ func (i *Interpreter) GantiVariable(varName string, value common.Value, context 
 		if posend != nil {
 			end = *posend
 		}
-		return res.Failure(common.RTError(start, end, fmt.Sprintf("Constant variable '%s' can not be assigned!", varName), context))
+		declLineMsg := ""
+		declLineVal := context.Symbol_Table.Get("ConstDeclLine " + varName)
+		if declLineVal != nil {
+			if num, ok := declLineVal.(common.Number); ok {
+				declLineMsg = fmt.Sprintf(" (declared at line %d)", int(num.Value))
+			}
+		}
+		return res.Failure(common.RTError(start, end, fmt.Sprintf("Constant variable '%s' can not be assigned!%s", varName, declLineMsg), context))
 	}
 
 	// Check declared type of variable

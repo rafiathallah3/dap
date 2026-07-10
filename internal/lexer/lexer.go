@@ -4,7 +4,6 @@ import (
 	"dap/tools"
 	"fmt"
 	"regexp"
-	"strings"
 )
 
 type regexHandler func(lex *lexer, regex *regexp.Regexp)
@@ -15,13 +14,11 @@ type regexPattern struct {
 }
 
 type lexer struct {
-	patterns        []regexPattern
-	Tokens          []Token
-	Pos             *tools.Position
-	Source          string
-	newLinePos      []int
-	apakahAdaNewLine bool
-	posAdaNewLine   *tools.Position
+	patterns []regexPattern
+	Tokens   []Token
+	Pos      *tools.Position
+	Source   string
+	Err      error
 }
 
 func (lex *lexer) advanceText(text string) {
@@ -37,16 +34,6 @@ func (lex *lexer) advanceText(text string) {
 }
 
 func (lex *lexer) push(token Token) {
-	if lex.apakahAdaNewLine && lex.last().Kind != NEWLINE {
-		pos := lex.Pos
-		if lex.posAdaNewLine != nil {
-			pos = lex.posAdaNewLine
-		}
-		lex.Tokens = append(lex.Tokens, NewToken(NEWLINE, "\n", pos, nil))
-	}
-
-	lex.apakahAdaNewLine = false
-	lex.posAdaNewLine = nil
 	lex.Tokens = append(lex.Tokens, token)
 }
 
@@ -71,12 +58,14 @@ func Tokenize(source string, fileName string) ([]Token, error) {
 
 	lex := createLexer(source, fileName)
 
-	/* [Really bad to fix the space problem. Took me 3 or 4 days to fix it. I can't think of the solution other than this.] 07/02/2025 17:25 */
-	matches := RegexNewLine.FindAllStringIndex(source, -1)
-	lex.newLinePos = make([]int, 0)
-	for _, match := range matches {
-		lex.newLinePos = append(lex.newLinePos, match[1])
-	}
+	/*
+		[Really bad to fix the space problem. Took me 3 or 4 days to fix it. I can't think of the solution other than this.] 07/02/2025 17:25
+		matches := RegexNewLine.FindAllStringIndex(source, -1)
+		lex.newLinePos = make([]int, 0)
+		for _, match := range matches {
+			lex.newLinePos = append(lex.newLinePos, match[1])
+		}
+	*/
 
 	for !lex.at_eof() {
 		matched := false
@@ -86,6 +75,9 @@ func Tokenize(source string, fileName string) ([]Token, error) {
 			if loc != nil {
 				if loc[0] == 0 {
 					pattern.handler(lex, pattern.regex)
+					if lex.Err != nil {
+						return nil, lex.Err
+					}
 					matched = true
 					break
 				}
@@ -126,8 +118,9 @@ func createLexer(source string, fn string) *lexer {
 			{regexp.MustCompile(`[a-zA-Z_][a-zA-Z0-9_]*`), symbolHandler},
 			{regexp.MustCompile(`[0-9]+(\.[0-9]+)?`), numberHandler},
 			{regexp.MustCompile(`"([^"\\]*(?:\\.[^"\\]*)*)"`), stringHandler},
+			{regexp.MustCompile(`"([^"\n\\]*(?:\\.[^"\n\\]*)*)`), unterminatedStringHandler},
 			{regexp.MustCompile(`\/\/.*`), skipHandler},
-			{regexp.MustCompile(`\s+`), skipHandler},
+			{regexp.MustCompile(`[ \t\r]+`), skipHandler},
 			{regexp.MustCompile(`\[`), defaultHandler(OPEN_BRACKET, "[")},
 			{regexp.MustCompile(`\]`), defaultHandler(CLOSE_BRACKET, "]")},
 			{regexp.MustCompile(`\{`), defaultHandler(OPEN_CURLY, "{")},
@@ -161,7 +154,6 @@ func createLexer(source string, fn string) *lexer {
 			{regexp.MustCompile(`\*`), defaultHandler(STAR, "*")},
 			{regexp.MustCompile(`%`), defaultHandler(PERCENT, "%")},
 			{regexp.MustCompile(`\^`), defaultHandler(POWER, "^")},
-			{regexp.MustCompile(`^`), defaultHandler(NEWLINE, "\n")},
 		},
 	}
 
@@ -175,37 +167,19 @@ func numberHandler(lex *lexer, regex *regexp.Regexp) {
 }
 
 func skipHandler(lex *lexer, regex *regexp.Regexp) {
-	startPos := lex.Pos.Copy()
 	match := regex.FindString(lex.remainder())
-
-	newlineIdx := strings.Index(match, "\n")
-	if newlineIdx != -1 {
-		posOfNewline := startPos.Copy()
-		for i := 0; i < newlineIdx; i++ {
-			char := match[i]
-			posOfNewline.Idx++
-			if char == '\n' {
-				posOfNewline.Ln++
-				posOfNewline.Col = 0
-			} else {
-				posOfNewline.Col++
-			}
-		}
-		lex.posAdaNewLine = posOfNewline
-	}
-
 	lex.advanceText(match)
-
-	for len(lex.newLinePos) > 0 && lex.Pos.Idx >= lex.newLinePos[0] {
-		lex.apakahAdaNewLine = true
-		lex.newLinePos = lex.newLinePos[1:]
-	}
 }
 
 func stringHandler(lex *lexer, regex *regexp.Regexp) {
 	match := regex.FindString(lex.remainder())
 	lex.push(NewToken(STRING, match, lex.Pos, nil))
 	lex.advanceText(match)
+}
+
+func unterminatedStringHandler(lex *lexer, regex *regexp.Regexp) {
+	errMsg := tools.FormatSyntaxError(*lex.Pos, "SyntaxError", "unterminated string literal")
+	lex.Err = fmt.Errorf("%s", errMsg)
 }
 
 func symbolHandler(lex *lexer, regex *regexp.Regexp) {

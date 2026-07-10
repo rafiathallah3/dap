@@ -4,13 +4,18 @@ dictionary
     x : integer
     y : real
 algorithm
-    print "[26/06/2026 18:22]"
+    print "[10/07/2026 18:22]"
 
     x <- 5
     y <- 2.5
 
-    z <- x /
+    z <- x / y
     print z
+
+    while (z >= 2 and x <= 5) or x >= 5 do
+        print z
+        z <- z - 1
+    endwhile
 
     print pi
 endprogram
