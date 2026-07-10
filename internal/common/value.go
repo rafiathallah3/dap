@@ -1,13 +1,16 @@
 package common
 
 import (
+	"bufio"
 	"dap/tools"
 	"fmt"
+	"io"
 	"math"
+	"os"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
-	"slices"
 )
 
 func safePos(p *tools.Position) tools.Position {
@@ -419,6 +422,24 @@ func (s String) Multed_by(other Value) (Value, *Error) {
 	return nil, &err
 }
 
+func (s String) Get_comparison_eq(other Value) (Value, *Error) {
+	switch other := other.(type) {
+	case String:
+		return Boolean{Value: s.Value == other.Value, Context: s.Context}.Set_pos(s.Pos_Start, s.Pos_End), nil
+	}
+	err := RTError(safePos(s.Pos_Start), safePos(s.Pos_End), "Illegal operation: cannot compare equality with the given type", s.Context)
+	return nil, &err
+}
+
+func (s String) Get_comparison_nq(other Value) (Value, *Error) {
+	switch other := other.(type) {
+	case String:
+		return Boolean{Value: s.Value != other.Value, Context: s.Context}.Set_pos(s.Pos_Start, s.Pos_End), nil
+	}
+	err := RTError(safePos(s.Pos_Start), safePos(s.Pos_End), "Illegal operation: cannot compare inequality with the given type", s.Context)
+	return nil, &err
+}
+
 type Number struct {
 	Value     float64
 	IsReal    bool
@@ -717,7 +738,7 @@ func (n BaseFunction) CheckArgs(ArgNames []string, args []Value) Value {
 	if len(args) > len(ArgNames) {
 		adaSpread := false
 		for i, v := range ArgNames {
-			if i == len(ArgNames)-1 && v[:3] == "..." {
+			if i == len(ArgNames)-1 && strings.HasPrefix(v, "...") {
 				adaSpread = true
 			}
 		}
@@ -736,7 +757,7 @@ func (n BaseFunction) CheckArgs(ArgNames []string, args []Value) Value {
 
 func (n BaseFunction) PopulateArgs(ArgNames []string, args []Value, exec_ctx *Context) {
 	for i := 0; i < len(ArgNames); i++ {
-		if i == len(ArgNames)-1 && ArgNames[i][:3] == "..." {
+		if i == len(ArgNames)-1 && strings.HasPrefix(ArgNames[i], "...") {
 			v := strings.ReplaceAll(ArgNames[i], "...", "")
 
 			args[i].Set_context(exec_ctx)
@@ -955,11 +976,44 @@ func (n BuiltInFunction) ExecuteInput() ([]string, func(*Context, []Expr) Value)
 
 				ctx.Symbol_Table.Set(varName, String{Value: s})
 			default:
-				return res.Failure(RTError(*n.Pos_Start, *n.Pos_End, "Parameter must be a Variable access node", ctx))
+				return res.Failure(RTError(*n.Pos_Start, *n.Pos_End, "input() can only read into a variable, not an expression or literal", ctx))
 			}
 		}
 
 		return res.Success(Null{Context: ctx})
+	}
+}
+
+func (n BuiltInFunction) ExecutePanjang() ([]string, func(*Context, []Expr) Value) {
+	return []string{"value"}, func(ctx *Context, rawArgs []Expr) Value {
+		res := &RTResult{}
+		val := ctx.Symbol_Table.Get("value")
+		if s, ok := val.(String); ok {
+			return res.Success(Number{Value: float64(len(s.Value)), IsReal: false, Context: ctx})
+		}
+		if arr, ok := val.(Array); ok {
+			return res.Success(Number{Value: float64(len(arr.Elements)), IsReal: false, Context: ctx})
+		}
+		if list, ok := val.(List); ok {
+			return res.Success(Number{Value: float64(len(list.Elements)), IsReal: false, Context: ctx})
+		}
+
+		errNya := RTError(*n.Pos_Start, *n.Pos_End, "Argument to panjang must be a string, array, or list", ctx)
+		return res.Failure(errNya)
+	}
+}
+
+func (n BuiltInFunction) ExecuteBulat() ([]string, func(*Context, []Expr) Value) {
+	return []string{"value"}, func(ctx *Context, rawArgs []Expr) Value {
+		res := &RTResult{}
+		val := ctx.Symbol_Table.Get("value")
+		if num, ok := val.(Number); ok {
+			rounded := math.Floor(num.Value + 0.5)
+			return res.Success(Number{Value: rounded, IsReal: false, Context: ctx})
+		}
+
+		errNya := RTError(*n.Pos_Start, *n.Pos_End, "Argument to Bulat must be a number", ctx)
+		return res.Failure(errNya)
 	}
 }
 
@@ -1072,6 +1126,78 @@ func (n BuiltInFunction) ExecuteAppend() ([]string, func(*Context, []Expr) Value
 		list.Elements = append(list.Elements, value)
 		ctx.Symbol_Table.Set("list", list)
 		return res.Success(Number{Value: 0})
+	}
+}
+
+var (
+	lastStdin   *os.File
+	stdinReader *bufio.Reader
+)
+
+func getStdinReader() *bufio.Reader {
+	if os.Stdin != lastStdin {
+		lastStdin = os.Stdin
+		stdinReader = bufio.NewReader(os.Stdin)
+	}
+	return stdinReader
+}
+
+func (n BuiltInFunction) ExecuteInputBaris() ([]string, func(*Context, []Expr) Value) {
+	return []string{"...value"}, func(ctx *Context, rawArgs []Expr) Value {
+		res := &RTResult{}
+		reader := getStdinReader()
+
+		for i := 0; i < len(ctx.Symbol_Table.Get("value").(List).Elements); i++ {
+			switch rawArgs := rawArgs[i].(type) {
+			case VarAccessNode:
+				line, err := reader.ReadString('\n')
+				if err != nil && err != io.EOF {
+					errNya := RTError(*n.Pos_Start, *n.Pos_End, fmt.Sprintf("Error reading input: %v", err), ctx)
+					return res.Failure(errNya)
+				}
+				line = strings.TrimRight(line, "\r\n")
+
+				varName := rawArgs.VarNameTok.Value
+				declaredTypeVal := ctx.Symbol_Table.Get("VariableType " + varName)
+				var declaredTypeStr string
+				if declaredTypeVal != nil {
+					if sVal, ok := declaredTypeVal.(String); ok {
+						declaredTypeStr = sVal.Value
+					}
+				}
+
+				if declaredTypeStr == "integer" {
+					if parseFloat, err := strconv.ParseFloat(line, 64); err == nil {
+						isReal := strings.Contains(line, ".")
+						if isReal || parseFloat != math.Floor(parseFloat) {
+							errNya := RTError(*n.Pos_Start, *n.Pos_End, fmt.Sprintf("Type mismatch: cannot assign real number to integer variable '%s'", varName), ctx)
+							return res.Failure(errNya)
+						}
+						ctx.Symbol_Table.Set(varName, Number{Value: parseFloat, IsReal: isReal, Context: ctx})
+						continue
+					}
+					errNya := RTError(*n.Pos_Start, *n.Pos_End, fmt.Sprintf("Type mismatch: cannot assign string to integer variable '%s'", varName), ctx)
+					return res.Failure(errNya)
+				}
+
+				ctx.Symbol_Table.Set(varName, String{Value: line})
+			default:
+				return res.Failure(RTError(*n.Pos_Start, *n.Pos_End, "inputBaris() can only read into a variable, not an expression or literal", ctx))
+			}
+		}
+
+		return res.Success(Null{Context: ctx})
+	}
+}
+
+func (n BuiltInFunction) ExecuteKonversiKeString() ([]string, func(*Context, []Expr) Value) {
+	return []string{"value"}, func(ctx *Context, rawArgs []Expr) Value {
+		res := &RTResult{}
+		val := ctx.Symbol_Table.Get("value")
+		return res.Success(String{
+			Value:   PrintValueInterpreter(val),
+			Context: ctx,
+		})
 	}
 }
 

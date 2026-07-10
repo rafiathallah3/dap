@@ -404,7 +404,7 @@ func (p *parser) list_expr() common.Expr {
 	} else {
 		elementNodes = append(elementNodes, res.Register(p.expr()))
 		if res.Error != nil {
-			errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected, ']', 'var', 'if', 'for', 'while', 'fun', number, identifier")
+			errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected ']', 'if', 'for', 'while', 'function', a number, or an identifier")
 			return res.Failure(&errorNya)
 		}
 
@@ -419,7 +419,7 @@ func (p *parser) list_expr() common.Expr {
 		}
 
 		if p.currentToken().Kind != lexer.CLOSE_BRACKET {
-			errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected, ']' or ','")
+			errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected ']' or ','")
 			return res.Failure(&errorNya)
 		}
 
@@ -530,7 +530,7 @@ func (p *parser) if_expr_cases(caseKeyword lexer.TokenKind) common.Expr {
 	var else_case common.ElseCase
 
 	if p.currentToken().Kind != caseKeyword {
-		errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, fmt.Sprintf("Expected '%v'", caseKeyword))
+		errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, fmt.Sprintf("Expected '%s'", lexer.TokenKindString(caseKeyword)))
 		return res.Failure(&errorNya)
 	}
 
@@ -638,9 +638,13 @@ func (p *parser) for_expr() common.Expr {
 		return res
 	}
 
-	if p.currentToken().Kind != lexer.TO {
-		errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, "Expected 'to'")
+	isDown := false
+	if p.currentToken().Kind != lexer.TO && p.currentToken().Kind != lexer.DOWNTO {
+		errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, "Expected 'to' or 'downto'")
 		return res.Failure(&errorNya)
+	}
+	if p.currentToken().Kind == lexer.DOWNTO {
+		isDown = true
 	}
 
 	res.Register_Advancement()
@@ -694,6 +698,7 @@ func (p *parser) for_expr() common.Expr {
 			StepValueNode:    StepValue,
 			BodyNode:         body,
 			ShouldReturnNull: true,
+			IsDown:           isDown,
 			Pos_Start:        varName.Pos_Start,
 			Pos_end:          body.GetPosEnd(),
 		})
@@ -711,6 +716,7 @@ func (p *parser) for_expr() common.Expr {
 		StepValueNode:    StepValue,
 		BodyNode:         IsiValue,
 		ShouldReturnNull: false,
+		IsDown:           isDown,
 		Pos_Start:        varName.Pos_Start,
 		Pos_end:          IsiValue.GetPosEnd(),
 	})
@@ -777,6 +783,102 @@ func (p *parser) while_expr() common.Expr {
 		ShouldReturnNull: false,
 		Pos_Start:        kondisi.GetPosStart(),
 		Pos_end:          IsiNode.GetPosEnd(),
+	})
+}
+
+func (p *parser) depend_expr() common.Expr {
+	res := &common.ParseResult{}
+
+	if p.currentToken().Kind != lexer.DEPEND {
+		errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, "Expected 'depend'")
+		return res.Failure(&errorNya)
+	}
+	posStart := p.currentToken().Pos_Start.Copy()
+
+	res.Register_Advancement()
+	p.advance()
+
+	if p.currentToken().Kind != lexer.ON {
+		errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, "Expected 'on'")
+		return res.Failure(&errorNya)
+	}
+	res.Register_Advancement()
+	p.advance()
+
+	var switchExpr common.Expr
+	if p.currentToken().Kind != lexer.NEWLINE {
+		switchExpr = res.Register(p.expr())
+		if res.Error != nil {
+			return res
+		}
+	}
+
+	if p.currentToken().Kind == lexer.NEWLINE {
+		res.Register_Advancement()
+		p.advance()
+	}
+
+	var cases []common.SwitchCase
+	var defaultCase common.Expr = common.NullNode{}
+
+	for p.currentToken().Kind != lexer.ENDDEPENDON {
+		if p.currentToken().Kind == lexer.EOF {
+			errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected 'enddependon'")
+			return res.Failure(&errorNya)
+		}
+		if p.currentToken().Kind == lexer.NEWLINE {
+			res.Register_Advancement()
+			p.advance()
+			continue
+		}
+
+		if p.currentToken().Kind == lexer.IDENTIFIER && p.currentToken().Value == "default" {
+			res.Register_Advancement()
+			p.advance()
+
+			if p.currentToken().Kind != lexer.COLON {
+				errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected ':' after default")
+				return res.Failure(&errorNya)
+			}
+			res.Register_Advancement()
+			p.advance()
+
+			defaultCaseExpr := res.Register(p.statement())
+			if res.Error != nil {
+				return res
+			}
+			defaultCase = defaultCaseExpr
+		} else {
+			caseVal := res.Register(p.expr())
+			if res.Error != nil {
+				return res
+			}
+
+			if p.currentToken().Kind != lexer.COLON {
+				errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected ':' after case value")
+				return res.Failure(&errorNya)
+			}
+			res.Register_Advancement()
+			p.advance()
+
+			stmtExpr := res.Register(p.statement())
+			if res.Error != nil {
+				return res
+			}
+
+			cases = append(cases, common.SwitchCase{Value: caseVal, Body: stmtExpr})
+		}
+	}
+
+	res.Register_Advancement()
+	p.advance() // consume ENDDEPENDON
+
+	return res.Success(common.DependNode{
+		Value:       switchExpr,
+		Cases:       cases,
+		DefaultCase: defaultCase,
+		Pos_Start:   posStart,
+		Pos_End:     p.currentToken().Pos_End.Copy(),
 	})
 }
 
@@ -957,7 +1059,7 @@ func (p *parser) function_def() common.Expr {
 	}
 
 	if p.currentToken().Kind != lexer.END && p.currentToken().Kind != lexer.ENDIF {
-		errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, "Expected 'end' or 'endif'")
+		errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, "Expected 'end' to close the function body")
 		return res.Failure(&errorNya)
 	}
 
@@ -1051,6 +1153,13 @@ func (p *parser) atom() common.Expr {
 		}
 
 		return res.Success(repeat_expr)
+	case lexer.DEPEND:
+		depend_expr := res.Register(p.depend_expr())
+		if res.Error != nil {
+			return res
+		}
+
+		return res.Success(depend_expr)
 	case lexer.FUNCTION:
 		function_def := res.Register(p.function_def())
 		if res.Error != nil {
@@ -1235,7 +1344,7 @@ func (p *parser) comp_expr() common.Expr {
 
 	node := res.Register(p.bin_op(p.arith_expr, []lexer.TokenKind{lexer.EQUALS, lexer.NOT_EQUALS, lexer.LESS, lexer.LESS_EQUALS, lexer.GREATER, lexer.GREATER_EQUALS}, p.arith_expr))
 	if res.Error != nil {
-		errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected int, float, identifier, NOT, '+', '-', or '(', '[")
+		errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected a number, an identifier, 'not', '+', '-', '(' or '['")
 		return res.Failure(&errorNya)
 	}
 
@@ -1367,7 +1476,7 @@ func (p *parser) statement() common.Expr {
 
 	expr := res.Register(p.expr())
 	if res.Error != nil {
-		errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, fmt.Sprintf("Got, %s | Expected 'continue', 'break', 'return' 'var', 'for', 'while', 'function', int, float, identifier, '+', '-', '(', '['", p.currentToken().Value))
+		errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, fmt.Sprintf("Got '%s', expected 'continue', 'break', 'return', 'for', 'while', 'function', a number, an identifier, '+', '-', '(' or '['", p.currentToken().Value))
 		return res.Failure(&errorNya)
 	}
 
@@ -1461,7 +1570,7 @@ func (p *parser) expr() common.Expr {
 
 	node := res.Register(p.bin_op(p.comp_expr, []lexer.TokenKind{lexer.AND, lexer.OR}, p.comp_expr))
 	if res.Error != nil {
-		errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected 'var', 'for', 'while', 'function', int, float, identifier, '+', '-', '(', '[")
+		errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.currentToken().Pos_End, "Expected 'for', 'while', 'function', a number, an identifier, '+', '-', '(' or '['")
 		return res.Failure(&errorNya)
 	}
 

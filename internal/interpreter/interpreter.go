@@ -211,6 +211,10 @@ func (i *Interpreter) VisitBinOpNode(node common.Expr, context *common.Context) 
 			hasil, err = left.Added_to(right)
 		case lexer.STAR:
 			hasil, err = left.Multed_by(right)
+		case lexer.EQUALS:
+			hasil, err = left.Get_comparison_eq(right)
+		case lexer.NOT_EQUALS:
+			hasil, err = left.Get_comparison_nq(right)
 		}
 	case common.List:
 		switch nodeBinary.Operator.Kind {
@@ -344,9 +348,16 @@ func (i *Interpreter) VisitForNode(node common.Expr, context *common.Context) co
 	var stepValue common.Number
 	switch nodeFor.StepValueNode.(type) {
 	case common.NullNode:
-		stepValue = common.Number{Value: 1, IsReal: false}
+		if nodeFor.IsDown {
+			stepValue = common.Number{Value: -1, IsReal: false}
+		} else {
+			stepValue = common.Number{Value: 1, IsReal: false}
+		}
 	default:
 		stepValue = res.Register(i.Visit(nodeFor.StepValueNode, context)).(common.Number)
+		if nodeFor.IsDown && stepValue.Value > 0 {
+			stepValue.Value = -stepValue.Value
+		}
 
 		if res.ShouldReturn() {
 			return res
@@ -769,21 +780,32 @@ func (i *Interpreter) VisitArrayIndexNode(node common.Expr, context *common.Cont
 		return res
 	}
 
-	array, ok := left.(common.Array)
-	if !ok {
-		return res.Failure(common.RTError(*indexNode.Left.GetPosStart(), *indexNode.Left.GetPosEnd(), "Left hand side is not an array", context))
-	}
+	switch left := left.(type) {
+	case common.Array:
+		if _, ok := indexVal.(common.Number); !ok {
+			return res.Failure(common.RTError(*indexNode.Index.GetPosStart(), *indexNode.Index.GetPosEnd(), "Array index must be a number", context))
+		}
 
-	if _, ok := indexVal.(common.Number); !ok {
-		return res.Failure(common.RTError(*indexNode.Index.GetPosStart(), *indexNode.Index.GetPosEnd(), "Array index must be a number", context))
-	}
+		index := int(indexVal.(common.Number).Value)
+		if index < left.Start || index > left.End {
+			return res.Failure(common.RTError(*indexNode.Index.GetPosStart(), *indexNode.Index.GetPosEnd(), fmt.Sprintf("Index %d out of bounds [%d..%d]", index, left.Start, left.End), context))
+		}
 
-	index := int(indexVal.(common.Number).Value)
-	if index < array.Start || index > array.End {
-		return res.Failure(common.RTError(*indexNode.Index.GetPosStart(), *indexNode.Index.GetPosEnd(), fmt.Sprintf("Index %d out of bounds [%d..%d]", index, array.Start, array.End), context))
-	}
+		return res.Success(left.Elements[index-left.Start])
+	case common.String:
+		if _, ok := indexVal.(common.Number); !ok {
+			return res.Failure(common.RTError(*indexNode.Index.GetPosStart(), *indexNode.Index.GetPosEnd(), "String index must be a number", context))
+		}
 
-	return res.Success(array.Elements[index-array.Start])
+		index := int(indexVal.(common.Number).Value)
+		if index < 1 || index > len(left.Value) {
+			return res.Failure(common.RTError(*indexNode.Index.GetPosStart(), *indexNode.Index.GetPosEnd(), fmt.Sprintf("String index %d out of bounds [1..%d]", index, len(left.Value)), context))
+		}
+
+		return res.Success(common.String{Value: string(left.Value[index-1]), Context: context})
+	default:
+		return res.Failure(common.RTError(*indexNode.Left.GetPosStart(), *indexNode.Left.GetPosEnd(), "Left hand side is not indexable", context))
+	}
 }
 
 func (i *Interpreter) VisitArrayAssignNode(node common.Expr, context *common.Context) common.Value {
@@ -912,6 +934,8 @@ func (i *Interpreter) InitializeType(typeNode common.Expr, context *common.Conte
 			return res.Success(common.String{Value: "", Context: context})
 		case "boolean":
 			return res.Success(common.Boolean{Value: false, Context: context})
+		case "char":
+			return res.Success(common.String{Value: " ", Context: context})
 		default:
 			val := context.Symbol_Table.Get(typeName)
 			if typeDef, ok := val.(common.Type); ok {
@@ -975,7 +999,7 @@ func (i *Interpreter) GetBaseTypeName(typeNode common.Expr, context *common.Cont
 	case common.VarAccessNode:
 		typeName := t.VarNameTok.Value
 		switch typeName {
-		case "integer", "real", "string", "boolean":
+		case "integer", "real", "string", "boolean", "char":
 			return typeName, nil
 		default:
 			val := context.Symbol_Table.Get(typeName)
@@ -986,4 +1010,77 @@ func (i *Interpreter) GetBaseTypeName(typeNode common.Expr, context *common.Cont
 		}
 	}
 	return "", nil
+}
+
+func valuesAreEqual(v1, v2 common.Value) bool {
+	n1, ok1 := v1.(common.Number)
+	n2, ok2 := v2.(common.Number)
+	if ok1 && ok2 {
+		return n1.Value == n2.Value
+	}
+
+	b1, ok1 := v1.(common.Boolean)
+	b2, ok2 := v2.(common.Boolean)
+	if ok1 && ok2 {
+		return b1.Value == b2.Value
+	}
+
+	s1, ok1 := v1.(common.String)
+	s2, ok2 := v2.(common.String)
+	if ok1 && ok2 {
+		return s1.Value == s2.Value
+	}
+
+	return v1.Print() == v2.Print()
+}
+
+func (i *Interpreter) VisitDependNode(node common.Expr, context *common.Context) common.Value {
+	res := &common.RTResult{}
+	dependNode := node.(common.DependNode)
+
+	var switchVal common.Value
+	if dependNode.Value != nil {
+		switchVal = res.Register(i.Visit(dependNode.Value, context))
+		if res.ShouldReturn() {
+			return res
+		}
+	}
+
+	matched := false
+	for _, c := range dependNode.Cases {
+		caseVal := res.Register(i.Visit(c.Value, context))
+		if res.ShouldReturn() {
+			return res
+		}
+
+		if switchVal != nil {
+			if valuesAreEqual(switchVal, caseVal) {
+				matched = true
+				val := res.Register(i.Visit(c.Body, context))
+				if res.ShouldReturn() {
+					return res
+				}
+				return res.Success(val)
+			}
+		} else {
+			if caseVal.Is_true() {
+				matched = true
+				val := res.Register(i.Visit(c.Body, context))
+				if res.ShouldReturn() {
+					return res
+				}
+				return res.Success(val)
+			}
+		}
+	}
+
+	if !matched && dependNode.DefaultCase != nil {
+		val := res.Register(i.Visit(dependNode.DefaultCase, context))
+		if res.ShouldReturn() {
+			return res
+		}
+		return res.Success(val)
+	}
+
+	return res.Success(common.Null{})
 }

@@ -98,6 +98,7 @@ func main() {
 	globalSymbolTable.Set("real", common.Number{Value: 0, IsReal: true})
 	globalSymbolTable.Set("string", common.String{Value: ""})
 	globalSymbolTable.Set("boolean", common.Boolean{Value: false})
+	globalSymbolTable.Set("char", common.String{Value: " "})
 
 	for Keyword, NamaFunction := range tools.SemuaBuiltInFunction {
 		globalSymbolTable.Set(Keyword, common.BuiltInFunction{

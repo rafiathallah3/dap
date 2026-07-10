@@ -89,6 +89,10 @@ const (
 	ARRAY
 	OF
 	TYPE
+	DOWNTO
+	DEPEND
+	ON
+	ENDDEPENDON
 )
 
 var reserved_lu map[string]TokenKind = map[string]TokenKind{
@@ -139,6 +143,14 @@ var reserved_lu map[string]TokenKind = map[string]TokenKind{
 	"OR":         OR,
 	"not":        NOT,
 	"NOT":        NOT,
+	"downto":     DOWNTO,
+	"DOWNTO":     DOWNTO,
+	"depend":     DEPEND,
+	"DEPEND":     DEPEND,
+	"on":         ON,
+	"ON":         ON,
+	"enddependon": ENDDEPENDON,
+	"ENDDEPENDON": ENDDEPENDON,
 }
 
 type Token struct {
@@ -333,6 +345,14 @@ func TokenKindString(kind TokenKind) string {
 		return "OF"
 	case TYPE:
 		return "TYPE"
+	case DOWNTO:
+		return "DOWNTO"
+	case DEPEND:
+		return "DEPEND"
+	case ON:
+		return "ON"
+	case ENDDEPENDON:
+		return "ENDDEPENDON"
 	default:
 		return "UNKNOWN"
 	}

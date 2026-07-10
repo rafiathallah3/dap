@@ -118,6 +118,7 @@ func createLexer(source string, fn string) *lexer {
 			{regexp.MustCompile(`[a-zA-Z_][a-zA-Z0-9_]*`), symbolHandler},
 			{regexp.MustCompile(`[0-9]+(\.[0-9]+)?`), numberHandler},
 			{regexp.MustCompile(`"([^"\\]*(?:\\.[^"\\]*)*)"`), stringHandler},
+			{regexp.MustCompile(`'([^'\\]*(?:\\.[^'\\]*)*)'`), stringHandler},
 			{regexp.MustCompile(`"([^"\n\\]*(?:\\.[^"\n\\]*)*)`), unterminatedStringHandler},
 			{regexp.MustCompile(`\/\/.*`), skipHandler},
 			// Pascal-style block comments "{ ... }" (used throughout the

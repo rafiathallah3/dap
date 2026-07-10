@@ -68,6 +68,8 @@ func PrintValueAST(n Expr) string {
 		return hasil + ")"
 	case FuncNode:
 		return fmt.Sprintf("FUNCTION %s", n.VarNameTok.Value)
+	case DependNode:
+		return "DEPEND ON"
 	case *ParseResult:
 		return PrintValueAST(n.Node)
 	}
@@ -367,6 +369,7 @@ type ForNode struct {
 	StepValueNode    Expr
 	BodyNode         Expr
 	ShouldReturnNull bool
+	IsDown           bool
 	Pos_Start        *tools.Position
 	Pos_end          *tools.Position
 }
@@ -624,5 +627,32 @@ func (n ArrayAssignNode) GetPosStart() *tools.Position {
 	return n.Pos_Start
 }
 func (n ArrayAssignNode) GetPosEnd() *tools.Position {
+	return n.Pos_End
+}
+
+type SwitchCase struct {
+	Value Expr
+	Body  Expr
+}
+
+type DependNode struct {
+	Value            Expr
+	Cases            []SwitchCase
+	DefaultCase      Expr
+	Pos_Start        *tools.Position
+	Pos_End          *tools.Position
+}
+
+func (n DependNode) expr() {}
+func (n DependNode) Print() string {
+	return PrintValueAST(n)
+}
+func (n DependNode) Name() string {
+	return "DependNode"
+}
+func (n DependNode) GetPosStart() *tools.Position {
+	return n.Pos_Start
+}
+func (n DependNode) GetPosEnd() *tools.Position {
 	return n.Pos_End
 }

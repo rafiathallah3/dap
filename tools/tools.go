@@ -59,6 +59,18 @@ var SemuaBuiltInFunction map[string]string = map[string]string{
 	"READ":   "Input",
 	"input":  "Input",
 	"INPUT":  "Input",
+	"panjang": "Panjang",
+	"PANJANG": "Panjang",
+	"Panjang": "Panjang",
+	"bulat":   "Bulat",
+	"BULAT":   "Bulat",
+	"Bulat":   "Bulat",
+	"inputBaris":       "InputBaris",
+	"INPUTBARIS":       "InputBaris",
+	"inputbaris":       "InputBaris",
+	"konversiKeString": "KonversiKeString",
+	"KONVERSIKESTRING": "KonversiKeString",
+	"konversikestring": "KonversiKeString",
 }
 
 func ApakahBuiltinFunction(s string) bool {
@@ -104,9 +116,9 @@ func FormatSyntaxError(pos Position, errorName string, details string) string {
 	}
 
 	if strings.Contains(details, "Expected identifier, int, float") ||
-		strings.Contains(details, "Expected 'var', 'for', 'while'") ||
-		strings.Contains(details, "Expected int, float, identifier") ||
-		(strings.Contains(details, "Got, ") && strings.Contains(details, "Expected 'continue', 'break'")) {
+		strings.Contains(details, "Expected 'for', 'while', 'function', a number") ||
+		strings.Contains(details, "Expected a number, an identifier, 'not'") ||
+		(strings.Contains(details, "Got '") && strings.Contains(details, "expected 'continue', 'break'")) {
 		details = "invalid syntax"
 	}
 
