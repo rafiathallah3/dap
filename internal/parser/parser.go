@@ -244,6 +244,21 @@ func (p *parser) dictionary_expr() common.Expr {
 			varName := p.currentToken()
 			res.Register_Advancement()
 			p.advance()
+
+			// Optional type annotation: "const NAME : TYPE = VALUE"
+			// (dataset commonly writes "constant NAME : TYPE = VALUE").
+			// The type itself is not retained -- the value expression
+			// already determines the runtime type -- this only lets the
+			// parser skip past it instead of erroring out.
+			if p.currentToken().Kind == lexer.COLON {
+				res.Register_Advancement()
+				p.advance()
+
+				res.Register(p.parse_type())
+				if res.Error != nil {
+					return res
+				}
+			}
 			// fmt.Fprintf(os.Stderr, "EXPR CHECK: %s (%s)\n", lexer.TokenKindString(p.currentToken().Kind), p.currentToken().Value)
 			if p.currentToken().Kind != lexer.ASSIGNMENT && p.currentToken().Kind != lexer.LEFT_ARROW {
 				errorNya := common.InvalidSyntax(*p.currentToken().Pos_Start, *p.advance().Pos_End, fmt.Sprintf("Expected '=' or '<-', got %s", p.currentToken().Value))
