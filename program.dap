@@ -11,11 +11,4 @@ algorithm
 
     z <- x / y
     print z
-
-    while (z >= 2 and x <= 5) or x >= 5 do
-        print z
-        z <- z - 1
-    endwhile
-
-    print pi
 endprogram

@@ -510,6 +510,10 @@ func (n Number) Multed_by(other Value) (Value, *Error) {
 func (n Number) Divided_by(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
+		if !n.IsReal || !other.IsReal {
+			err := RTError(safePos(n.Pos_Start), safePos(other.Pos_End), "Illegal operation: '/' can only be used with real numbers, use 'div' for integer division", n.Context)
+			return nil, &err
+		}
 		if other.Value == 0 {
 			err := RTError(*other.Pos_Start, *other.Pos_End, "Division by zero", n.Context)
 			return other, &err
@@ -524,6 +528,10 @@ func (n Number) Divided_by(other Value) (Value, *Error) {
 func (n Number) DivBy(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
+		if n.IsReal || other.IsReal {
+			err := RTError(safePos(n.Pos_Start), safePos(other.Pos_End), "Illegal operation: 'div' can only be used with integers, use '/' for real division", n.Context)
+			return nil, &err
+		}
 		if other.Value == 0 {
 			err := RTError(*other.Pos_Start, *other.Pos_End, "Division by zero", n.Context)
 			return other, &err
