@@ -21,19 +21,47 @@ endprogram
 
 ## Installation
 
+### Quick Web Installer (Recommended)
+
+#### Windows (PowerShell)
+Open PowerShell and run:
+```powershell
+iwr -useb https://raw.githubusercontent.com/rafiathallah3/dap/main/install.ps1 | iex
+```
+
+#### Linux & macOS (Bash / Zsh)
+Open Terminal and run:
+```bash
+curl -fsSL https://raw.githubusercontent.com/rafiathallah3/dap/main/install.sh | bash
+```
+
+---
+
+### Manual Download from GitHub Releases
+Download the pre-compiled archive for your OS from the [GitHub Releases Page](https://github.com/rafiathallah3/dap/releases):
+- `dap-windows-amd64.zip` (Windows 64-bit)
+- `dap-linux-amd64.tar.gz` (Linux 64-bit)
+- `dap-darwin-amd64.tar.gz` (macOS Intel)
+- `dap-darwin-arm64.tar.gz` (macOS Apple Silicon)
+
+Extract the archive and run `install.ps1` (Windows) or `./install.sh` (Linux/macOS).
+
+---
+
+### Build from Source
+
 1. Clone the repository:
-   ```powershell
+   ```bash
    git clone https://github.com/rafiathallah3/dap.git
    cd dap
    ```
 
-2. Run the installer script (Windows):
-   ```powershell
-   .\install.ps1
-   ```
+2. Run the installer script:
+   - **Windows**: `.\install.ps1`
+   - **Linux / macOS**: `./install.sh`
 
 3. Open a **new** terminal window and run:
-   ```powershell
+   ```bash
    dap
    ```
 

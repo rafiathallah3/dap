@@ -1,0 +1,70 @@
+name: Release DAP Runtime
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Release Assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Build cross-platform binaries
+        run: |
+          mkdir -p dist/windows-amd64 dist/linux-amd64 dist/darwin-amd64 dist/darwin-arm64
+
+          # Windows amd64
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dist/windows-amd64/dap.exe .
+
+          # Linux amd64
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dist/linux-amd64/dap .
+
+          # macOS amd64 (Intel)
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o dist/darwin-amd64/dap .
+
+          # macOS arm64 (Apple Silicon)
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o dist/darwin-arm64/dap .
+
+      - name: Package release archives
+        run: |
+          # Copy installer scripts and examples to each distribution
+          for dir in dist/*; do
+            cp install.ps1 "$dir/"
+            cp install.sh "$dir/"
+            cp README.md "$dir/"
+            cp -r examples "$dir/"
+          done
+
+          # Create zip for Windows
+          cd dist/windows-amd64 && zip -r ../../dap-windows-amd64.zip . && cd ../..
+
+          # Create tar.gz for Linux & macOS
+          tar -czvf dap-linux-amd64.tar.gz -C dist/linux-amd64 .
+          tar -czvf dap-darwin-amd64.tar.gz -C dist/darwin-amd64 .
+          tar -czvf dap-darwin-arm64.tar.gz -C dist/darwin-arm64 .
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dap-windows-amd64.zip
+            dap-linux-amd64.tar.gz
+            dap-darwin-amd64.tar.gz
+            dap-darwin-arm64.tar.gz
+            install.ps1
+            install.sh
+          generate_release_notes: true
