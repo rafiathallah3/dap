@@ -1,0 +1,6 @@
+program TypoKeyword
+dictionary
+    x : integer
+algrithm
+    x <- 10
+endprogram

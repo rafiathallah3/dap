@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "typo_keyword.dap", line 4
+    algrithm
+            ^
+SyntaxError: Expected ':', got x

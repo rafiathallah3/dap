@@ -1,0 +1,10 @@
+program RepeatTest
+dictionary
+    i : integer
+algorithm
+    i <- 1
+    repeat
+        output(i)
+        i <- i + 1
+    until i > 4
+endprogram

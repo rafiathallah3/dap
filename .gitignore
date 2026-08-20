@@ -1,6 +1,7 @@
 /dist
 *.exe
-test/
+dap_test_bin*
+dap_feature_bin*
 dap_llm_prompt.md
 site/
 .cache/

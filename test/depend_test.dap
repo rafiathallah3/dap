@@ -1,0 +1,20 @@
+program DependTest
+dictionary
+    a : integer
+algorithm
+    // Style 1: depend on (a)
+    a <- 2
+    depend on (a)
+        1 : output("Hello")
+        2 : output("Hi")
+        3 : output("Hola")
+        default: output("No")
+    enddependon
+
+    // Style 2: depend on
+    depend on
+        a == 1 : output("Hello-2")
+        a == 2 : output("Hi-2")
+        default: output("No-2")
+    enddependon
+endprogram

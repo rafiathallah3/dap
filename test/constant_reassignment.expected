@@ -1,0 +1,2 @@
+File: constant_reassignment.dap, line 5, in <program>
+Runtime Error: Constant variable 'pi' can not be assigned! (declared at line 3)

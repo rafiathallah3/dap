@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "unterminated_string.dap", line 4
+        print "this is an unterminated string
+              ^
+SyntaxError: unterminated string literal

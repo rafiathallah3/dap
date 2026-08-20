@@ -1,0 +1,19 @@
+program RealFormattingTest
+dictionary
+    a : integer
+    x, y, z : real
+algorithm
+    a <- 3
+    x <- 3
+    y <- 3.0
+    z <- 3.5
+
+    write "a (integer 3):"
+    write a
+    write "x (real 3):"
+    write x
+    write "y (real 3.0):"
+    write y
+    write "z (real 3.5):"
+    write z
+endprogram

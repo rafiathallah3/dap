@@ -1,0 +1,8 @@
+program ModuloByZero
+dictionary
+    x, y, z : integer
+algorithm
+    x <- 10
+    y <- 0
+    z <- x % y
+endprogram

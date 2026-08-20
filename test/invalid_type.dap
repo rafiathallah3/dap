@@ -1,0 +1,6 @@
+program InvalidType
+dictionary
+    x : integer2
+algorithm
+    x <- 10
+endprogram

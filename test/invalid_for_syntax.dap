@@ -1,0 +1,8 @@
+program InvalidForSyntax
+dictionary
+    i : integer
+algorithm
+    for i <- 1 to do
+        write i
+    endfor
+endprogram

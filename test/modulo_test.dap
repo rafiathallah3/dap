@@ -1,0 +1,26 @@
+program ModuloTest
+dictionary
+    a, b, c, d : integer
+    x, y, z : real
+algorithm
+    a <- 10 % 3
+    b <- 10 mod 3
+    c <- 10 MOD 3
+    d <- -10 % 3
+
+    x <- 10.5 % 3.0
+    y <- 10.5 mod 3.0
+
+    write "a"
+    write a
+    write "b"
+    write b
+    write "c"
+    write c
+    write "d"
+    write d
+    write "x"
+    write x
+    write "y"
+    write y
+endprogram

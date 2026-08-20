@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "missing_endwhile.dap", line 9
+    endprogram
+    ^
+SyntaxError: Expected 'end' or 'endwhile'

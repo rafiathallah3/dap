@@ -1,0 +1,6 @@
+program ConstantReassignment
+dictionary
+    const pi = 3.14
+algorithm
+    pi <- 3.14159
+endprogram

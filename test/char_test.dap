@@ -1,0 +1,15 @@
+program CetakKarakter
+kamus
+    nilai : char
+    s : string
+algoritma
+    nilai <- 'A'
+    output(nilai)
+    s <- "Hello"
+    output(s[2])
+    if s[1] == 'H' then
+        output("starts with H")
+    else
+        output("no")
+    endif
+endprogram

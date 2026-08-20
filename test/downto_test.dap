@@ -1,0 +1,8 @@
+program DowntoTest
+dictionary
+    i : integer
+algorithm
+    for i <- 5 downto 2 do
+        output(i)
+    endfor
+endprogram

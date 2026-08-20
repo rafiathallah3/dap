@@ -1,0 +1,9 @@
+program MissingEndWhile
+dictionary
+    x : integer
+algorithm
+    x <- 0
+    while x < 5 do
+        x <- x + 1
+
+endprogram

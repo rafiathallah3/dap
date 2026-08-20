@@ -1,0 +1,8 @@
+program DivideByZero
+dictionary
+    x, y, z : integer
+algorithm
+    x <- 10
+    y <- 0
+    z <- x div y
+endprogram

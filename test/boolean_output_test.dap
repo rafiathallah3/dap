@@ -1,0 +1,15 @@
+program BooleanOutputTest
+dictionary
+    b : boolean
+    x : integer
+    y : integer
+algorithm
+    x <- 5
+    y <- 5
+    b <- (x == y)
+    output b
+    output (x != y)
+    output (true and false)
+    output (true or false)
+    output not true
+endprogram

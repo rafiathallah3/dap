@@ -1,0 +1,21 @@
+program CorrectCalculation
+dictionary
+    x, y, z : integer
+    pi : real
+algorithm
+    x <- 10
+    y <- 20
+    z <- x + y * 2
+    pi <- 3.14
+
+    write "z is"
+    write z
+    write "pi is"
+    write pi
+
+    if z > 40 then
+        write "greater"
+    else
+        write "less or equal"
+    endif
+endprogram

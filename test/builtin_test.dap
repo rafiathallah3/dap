@@ -1,0 +1,20 @@
+program BuiltinTest
+dictionary
+    s : string
+    n : real
+algorithm
+    s <- "Antigravity"
+    output(panjang(s))
+    
+    n <- 3.4
+    output(Bulat(n))
+    
+    n <- 3.5
+    output(Bulat(n))
+    
+    n <- 3.6
+    output(Bulat(n))
+    
+    n <- -2.5
+    output(Bulat(n))
+endprogram
