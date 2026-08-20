@@ -1,0 +1,97 @@
+site_name: DAP Documentation
+site_description: Official documentation for the DAP Pseudocode Language
+site_author: Rafi Athallah
+site_url: https://rafiathallah3.github.io/dap/
+repo_url: https://github.com/rafiathallah3/dap
+repo_name: rafiathallah3/dap
+edit_uri: blob/main/docs/
+
+theme:
+  name: material
+  language: en
+  palette:
+    # Light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.keys
+  - pymdownx.mark
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - English:
+      - Home: index.md
+      - Getting Started:
+          - Installation: getting-started/installation.md
+          - Quickstart: getting-started/quickstart.md
+      - Language Guide:
+          - Program Structure: language/structure.md
+          - Types & Variables: language/types-and-variables.md
+          - Operators: language/operators.md
+          - Control Flow: language/control-flow.md
+          - Functions: language/functions.md
+          - Input & Output: language/io.md
+          - Arrays & Structs: language/arrays-and-structs.md
+      - Tooling & CLI: guide/cli.md
+      - Examples: examples/algorithms.md
+  - Bahasa Indonesia:
+      - Beranda: id/index.md
+      - Panduan Awal:
+          - Instalasi: id/getting-started/installation.md
+          - Memulai Cepat: id/getting-started/quickstart.md
+      - Panduan Bahasa:
+          - Struktur Program: id/language/structure.md
+          - Tipe Data & Variabel: id/language/types-and-variables.md
+          - Operator: id/language/operators.md
+          - Alur Kontrol: id/language/control-flow.md
+          - Fungsi & Subrutin: id/language/functions.md
+          - Input & Output: id/language/io.md
+          - Array & Record (Struct): id/language/arrays-and-structs.md
+      - Alat & CLI: id/guide/cli.md
+      - Contoh Algoritma: id/examples/algorithms.md
