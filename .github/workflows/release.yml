@@ -28,16 +28,16 @@ jobs:
           mkdir -p dist/windows-amd64 dist/linux-amd64 dist/darwin-amd64 dist/darwin-arm64
 
           # Windows amd64
-          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dist/windows-amd64/dap.exe .
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${{ github.ref_name }}" -o dist/windows-amd64/dap.exe .
 
           # Linux amd64
-          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dist/linux-amd64/dap .
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${{ github.ref_name }}" -o dist/linux-amd64/dap .
 
           # macOS amd64 (Intel)
-          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o dist/darwin-amd64/dap .
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.Version=${{ github.ref_name }}" -o dist/darwin-amd64/dap .
 
           # macOS arm64 (Apple Silicon)
-          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o dist/darwin-arm64/dap .
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w -X main.Version=${{ github.ref_name }}" -o dist/darwin-arm64/dap .
 
       - name: Package release archives
         run: |
