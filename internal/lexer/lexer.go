@@ -13,6 +13,50 @@ type regexPattern struct {
 	handler regexHandler
 }
 
+// Precompile semua regex pattern di awal biar ga recompilation terus tiap manggil Tokenize.
+var defaultPatterns = []regexPattern{
+	{regexp.MustCompile(`\n|;`), defaultHandler(NEWLINE, "\n")},
+	{regexp.MustCompile(`[a-zA-Z_][a-zA-Z0-9_]*`), symbolHandler},
+	{regexp.MustCompile(`[0-9]+(\.[0-9]+)?`), numberHandler},
+	{regexp.MustCompile(`"([^"\\]*(?:\\.[^"\\]*)*)"`), stringHandler},
+	{regexp.MustCompile(`'([^'\\]*(?:\\.[^'\\]*)*)'`), stringHandler},
+	{regexp.MustCompile(`"([^"\n\\]*(?:\\.[^"\n\\]*)*)`), unterminatedStringHandler},
+	{regexp.MustCompile(`\/\/.*`), skipHandler},
+	{regexp.MustCompile(`(?s)\{\{.*?\}\}|\{[^}]*\}`), skipHandler},
+	{regexp.MustCompile(`[ \t\r]+`), skipHandler},
+	{regexp.MustCompile(`\[`), defaultHandler(OPEN_BRACKET, "[")},
+	{regexp.MustCompile(`\]`), defaultHandler(CLOSE_BRACKET, "]")},
+	{regexp.MustCompile(`\{`), defaultHandler(OPEN_CURLY, "{")},
+	{regexp.MustCompile(`\}`), defaultHandler(CLOSE_CURLY, "}")},
+	{regexp.MustCompile(`\(`), defaultHandler(OPEN_PAREN, "(")},
+	{regexp.MustCompile(`\)`), defaultHandler(CLOSE_PAREN, ")")},
+	{regexp.MustCompile(`==`), defaultHandler(EQUALS, "==")},
+	{regexp.MustCompile(`!=`), defaultHandler(NOT_EQUALS, "!=")},
+	{regexp.MustCompile(`->`), defaultHandler(RIGHT_ARROW, "->")},
+	{regexp.MustCompile(`<-`), defaultHandler(LEFT_ARROW, "<-")},
+	{regexp.MustCompile(`=`), defaultHandler(ASSIGNMENT, "=")},
+	{regexp.MustCompile(`!`), defaultHandler(NOT, "!")},
+	{regexp.MustCompile(`<=`), defaultHandler(LESS_EQUALS, "<=")},
+	{regexp.MustCompile(`<`), defaultHandler(LESS, "<")},
+	{regexp.MustCompile(`>=`), defaultHandler(GREATER_EQUALS, ">=")},
+	{regexp.MustCompile(`>`), defaultHandler(GREATER, ">")},
+	{regexp.MustCompile(`\|\|`), defaultHandler(OR, "||")},
+	{regexp.MustCompile(`&&`), defaultHandler(AND, "&&")},
+	{regexp.MustCompile(`\.\.`), defaultHandler(DOT_DOT, "..")},
+	{regexp.MustCompile(`\.`), defaultHandler(DOT, ".")},
+	{regexp.MustCompile(`:`), defaultHandler(COLON, ":")},
+	{regexp.MustCompile(`\?`), defaultHandler(QUESTION, "?")},
+	{regexp.MustCompile(`,`), defaultHandler(COMMA, ",")},
+	{regexp.MustCompile(`\+=`), defaultHandler(PLUS_EQUALS, "+=")},
+	{regexp.MustCompile(`-=`), defaultHandler(MINUS_EQUALS, "-=")},
+	{regexp.MustCompile(`\+`), defaultHandler(PLUS, "+")},
+	{regexp.MustCompile(`-`), defaultHandler(DASH, "-")},
+	{regexp.MustCompile(`/`), defaultHandler(SLASH, "/")},
+	{regexp.MustCompile(`\*`), defaultHandler(STAR, "*")},
+	{regexp.MustCompile(`%`), defaultHandler(PERCENT, "%")},
+	{regexp.MustCompile(`\^`), defaultHandler(POWER, "^")},
+}
+
 type lexer struct {
 	patterns []regexPattern
 	Tokens   []Token
@@ -37,20 +81,15 @@ func (lex *lexer) push(token Token) {
 	lex.Tokens = append(lex.Tokens, token)
 }
 
-func (lex *lexer) last() Token {
-	return lex.Tokens[len(lex.Tokens)-1]
-}
-
 func (lex *lexer) remainder() string {
 	return lex.Source[lex.Pos.Idx:]
 }
 
-func (lex *lexer) at_eof() bool {
+func (lex *lexer) atEOF() bool {
 	return lex.Pos.Idx >= len(lex.Source)
 }
 
-var RegexNewLine = regexp.MustCompile(`\n|;`)
-
+// Tokenize buat ngubah source code DAP jadi kumpulan slice Token.
 func Tokenize(source string, fileName string) ([]Token, error) {
 	if fileName == "" {
 		fileName = "<stdin>"
@@ -58,29 +97,18 @@ func Tokenize(source string, fileName string) ([]Token, error) {
 
 	lex := createLexer(source, fileName)
 
-	/*
-		[Really bad to fix the space problem. Took me 3 or 4 days to fix it. I can't think of the solution other than this.] 07/02/2025 17:25
-		matches := RegexNewLine.FindAllStringIndex(source, -1)
-		lex.newLinePos = make([]int, 0)
-		for _, match := range matches {
-			lex.newLinePos = append(lex.newLinePos, match[1])
-		}
-	*/
-
-	for !lex.at_eof() {
+	for !lex.atEOF() {
 		matched := false
 
 		for _, pattern := range lex.patterns {
 			loc := pattern.regex.FindStringIndex(lex.remainder())
-			if loc != nil {
-				if loc[0] == 0 {
-					pattern.handler(lex, pattern.regex)
-					if lex.Err != nil {
-						return nil, lex.Err
-					}
-					matched = true
-					break
+			if loc != nil && loc[0] == 0 {
+				pattern.handler(lex, pattern.regex)
+				if lex.Err != nil {
+					return nil, lex.Err
 				}
+				matched = true
+				break
 			}
 		}
 
@@ -103,7 +131,7 @@ func defaultHandler(kind TokenKind, value string) regexHandler {
 }
 
 func createLexer(source string, fn string) *lexer {
-	lex := &lexer{
+	return &lexer{
 		Source: source,
 		Pos: &tools.Position{
 			Idx:  0,
@@ -112,61 +140,9 @@ func createLexer(source string, fn string) *lexer {
 			Fn:   fn,
 			Ftxt: source,
 		},
-		Tokens: make([]Token, 0),
-		patterns: []regexPattern{
-			{regexp.MustCompile(`\n|;`), defaultHandler(NEWLINE, "\n")},
-			{regexp.MustCompile(`[a-zA-Z_][a-zA-Z0-9_]*`), symbolHandler},
-			{regexp.MustCompile(`[0-9]+(\.[0-9]+)?`), numberHandler},
-			{regexp.MustCompile(`"([^"\\]*(?:\\.[^"\\]*)*)"`), stringHandler},
-			{regexp.MustCompile(`'([^'\\]*(?:\\.[^'\\]*)*)'`), stringHandler},
-			{regexp.MustCompile(`"([^"\n\\]*(?:\\.[^"\n\\]*)*)`), unterminatedStringHandler},
-			{regexp.MustCompile(`\/\/.*`), skipHandler},
-			// Pascal-style block comments "{ ... }" (used throughout the
-			// student dataset, e.g. "{ Membaca input jumlah pelanggan }").
-			// OPEN_CURLY/CLOSE_CURLY below are otherwise unused by the
-			// parser, so treating a full "{...}" span as a skippable
-			// comment (like "//") is safe. Must come before the bare
-			// "{"/"}" patterns so a matched comment wins over the
-			// single-char token.
-			{regexp.MustCompile(`\{[^}]*\}`), skipHandler},
-			{regexp.MustCompile(`[ \t\r]+`), skipHandler},
-			{regexp.MustCompile(`\[`), defaultHandler(OPEN_BRACKET, "[")},
-			{regexp.MustCompile(`\]`), defaultHandler(CLOSE_BRACKET, "]")},
-			{regexp.MustCompile(`\{`), defaultHandler(OPEN_CURLY, "{")},
-			{regexp.MustCompile(`\}`), defaultHandler(CLOSE_CURLY, "}")},
-			{regexp.MustCompile(`\(`), defaultHandler(OPEN_PAREN, "(")},
-			{regexp.MustCompile(`\)`), defaultHandler(CLOSE_PAREN, ")")},
-			{regexp.MustCompile(`==`), defaultHandler(EQUALS, "==")},
-			{regexp.MustCompile(`!=`), defaultHandler(NOT_EQUALS, "!=")},
-			{regexp.MustCompile(`->`), defaultHandler(RIGHT_ARROW, "->")},
-			{regexp.MustCompile(`<-`), defaultHandler(LEFT_ARROW, "<-")},
-			{regexp.MustCompile(`=`), defaultHandler(ASSIGNMENT, "=")},
-			{regexp.MustCompile(`!`), defaultHandler(NOT, "!")},
-			{regexp.MustCompile(`<=`), defaultHandler(LESS_EQUALS, "<=")},
-			{regexp.MustCompile(`<`), defaultHandler(LESS, "<")},
-			{regexp.MustCompile(`>=`), defaultHandler(GREATER_EQUALS, ">=")},
-			{regexp.MustCompile(`>`), defaultHandler(GREATER, ">")},
-			{regexp.MustCompile(`\|\|`), defaultHandler(OR, "||")},
-			{regexp.MustCompile(`&&`), defaultHandler(AND, "&&")},
-			{regexp.MustCompile(`\.\.`), defaultHandler(DOT_DOT, "..")},
-			{regexp.MustCompile(`\.`), defaultHandler(DOT, ".")},
-			{regexp.MustCompile(`:`), defaultHandler(COLON, ":")},
-			{regexp.MustCompile(`\?`), defaultHandler(QUESTION, "?")},
-			{regexp.MustCompile(`,`), defaultHandler(COMMA, ",")},
-			// {regexp.MustCompile(`\+\+`), defaultHandler(PLUS_PLUS, "++")},
-			// {regexp.MustCompile(`--`), defaultHandler(MINUS_MINUS, "--")},
-			{regexp.MustCompile(`\+=`), defaultHandler(PLUS_EQUALS, "+=")},
-			{regexp.MustCompile(`-=`), defaultHandler(MINUS_EQUALS, "-=")},
-			{regexp.MustCompile(`\+`), defaultHandler(PLUS, "+")},
-			{regexp.MustCompile(`-`), defaultHandler(DASH, "-")},
-			{regexp.MustCompile(`/`), defaultHandler(SLASH, "/")},
-			{regexp.MustCompile(`\*`), defaultHandler(STAR, "*")},
-			{regexp.MustCompile(`%`), defaultHandler(PERCENT, "%")},
-			{regexp.MustCompile(`\^`), defaultHandler(POWER, "^")},
-		},
+		Tokens:   make([]Token, 0),
+		patterns: defaultPatterns,
 	}
-
-	return lex
 }
 
 func numberHandler(lex *lexer, regex *regexp.Regexp) {
@@ -194,7 +170,7 @@ func unterminatedStringHandler(lex *lexer, regex *regexp.Regexp) {
 func symbolHandler(lex *lexer, regex *regexp.Regexp) {
 	value := regex.FindString(lex.remainder())
 
-	if kind, exists := reserved_lu[value]; exists {
+	if kind, exists := ReservedKeywords[value]; exists {
 		lex.push(NewToken(kind, value, lex.Pos, nil))
 	} else {
 		lex.push(NewToken(IDENTIFIER, value, lex.Pos, nil))
