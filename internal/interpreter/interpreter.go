@@ -6,44 +6,106 @@ import (
 	"dap/tools"
 	"fmt"
 	"math"
-	"reflect"
 	"strconv"
 	"strings"
 )
 
+func safePos(p *tools.Position) tools.Position {
+	if p == nil {
+		return tools.Position{}
+	}
+	return *p
+}
+
+// Interpreter buat ngeksekusi node-node AST dari program DAP.
 type Interpreter struct{}
 
+// Visit buat ngeksekusi AST node pake static type switch (jauh lebih ngebut daripada reflection).
 func (i *Interpreter) Visit(node common.Expr, context *common.Context) common.Value {
-	methodName := "Visit" + reflect.TypeOf(node).Name()
-	method := reflect.ValueOf(i).MethodByName(methodName)
-
-	if method.IsValid() {
-		results := method.Call([]reflect.Value{reflect.ValueOf(node), reflect.ValueOf(context)})
-
-		if len(results) > 0 {
-			return results[0].Interface().(common.Value)
-		}
+	if node == nil {
+		return common.Null{}
 	}
 
-	return i.noVisitMethod(node, context)
+	switch n := node.(type) {
+	case common.NullNode:
+		return i.VisitNullNode(n, context)
+	case common.NumberNode:
+		return i.VisitNumberNode(n, context)
+	case common.StringNode:
+		return i.VisitStringNode(n, context)
+	case common.DictionaryNode:
+		return i.VisitDictionaryNode(n, context)
+	case common.ListNode:
+		return i.VisitListNode(n, context)
+	case common.VarAccessNode:
+		return i.VisitVarAccessNode(n, context)
+	case common.VarAssignNode:
+		return i.VisitVarAssignNode(n, context)
+	case common.BinOpNode:
+		return i.VisitBinOpNode(n, context)
+	case common.UnaryOpNode:
+		return i.VisitUnaryOpNode(n, context)
+	case common.IfNode:
+		return i.VisitIfNode(n, context)
+	case common.ForNode:
+		return i.VisitForNode(n, context)
+	case common.WhileNode:
+		return i.VisitWhileNode(n, context)
+	case common.RepeatNode:
+		return i.VisitRepeatNode(n, context)
+	case common.FuncNode:
+		return i.VisitFuncNode(n, context)
+	case common.CallNode:
+		return i.VisitCallNode(n, context)
+	case common.ReturnNode:
+		return i.VisitReturnNode(n, context)
+	case common.ContinueNode:
+		return i.VisitContinueNode(n, context)
+	case common.BreakNode:
+		return i.VisitBreakNode(n, context)
+	case common.ArrayTypeNode:
+		return i.VisitArrayTypeNode(n, context)
+	case common.ArrayIndexNode:
+		return i.VisitArrayIndexNode(n, context)
+	case common.ArrayAssignNode:
+		return i.VisitArrayAssignNode(n, context)
+	case common.MemberAccessNode:
+		return i.VisitMemberAccessNode(n, context)
+	case common.MemberAssignNode:
+		return i.VisitMemberAssignNode(n, context)
+	case common.TypeAliasNode:
+		return i.VisitTypeAliasNode(n, context)
+	case common.StructTypeNode:
+		return i.VisitStructTypeNode(n, context)
+	case common.DependNode:
+		return i.VisitDependNode(n, context)
+	case *common.ParseResult:
+		return i.Visit(n.Node, context)
+	default:
+		return i.noVisitMethod(node, context)
+	}
 }
 
 func (i *Interpreter) noVisitMethod(_ common.Expr, _ *common.Context) common.Value {
-	// fmt.Println("No Visit" + reflect.TypeOf(node).Name() + " Method defined")
 	return common.Null{}
 }
 
-func (i *Interpreter) VisitNullNode(node common.Expr, context *common.Context) common.Value {
+func (i *Interpreter) VisitNullNode(_ common.Expr, _ *common.Context) common.Value {
 	res := &common.RTResult{}
 	return res.Success(common.Null{})
 }
 
 func (i *Interpreter) VisitNumberNode(node common.Expr, context *common.Context) common.Value {
-	nodeToken := node.(common.NumberNode).Token
-	parseFloat, err := strconv.ParseFloat(nodeToken.Value, 64)
+	res := &common.RTResult{}
+	numNode, ok := node.(common.NumberNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected number node", context))
+	}
 
+	nodeToken := numNode.Token
+	parseFloat, err := strconv.ParseFloat(nodeToken.Value, 64)
 	if err != nil {
-		panic(fmt.Sprintf("Internal error: cannot parse '%s' as a number", nodeToken.Value))
+		return res.Failure(common.RTError(safePos(nodeToken.PosStart), safePos(nodeToken.PosEnd), fmt.Sprintf("Internal error: cannot parse '%s' as a number", nodeToken.Value), context))
 	}
 
 	numberValue := common.Number{
@@ -52,19 +114,30 @@ func (i *Interpreter) VisitNumberNode(node common.Expr, context *common.Context)
 		Context: context,
 	}
 
-	res := &common.RTResult{}
-	return res.Success(numberValue.Set_pos(nodeToken.Pos_Start, nodeToken.Pos_End))
+	return res.Success(numberValue.SetPos(nodeToken.PosStart, nodeToken.PosEnd))
 }
 
 func (i *Interpreter) VisitStringNode(node common.Expr, context *common.Context) common.Value {
-	nodeToken := node.(common.StringNode).Token
 	res := &common.RTResult{}
-	return res.Success(common.String{Value: nodeToken.Value[1 : len(nodeToken.Value)-1], Context: context}.Set_pos(nodeToken.Pos_Start, nodeToken.Pos_End))
+	strNode, ok := node.(common.StringNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected string node", context))
+	}
+
+	nodeToken := strNode.Token
+	val := nodeToken.Value
+	if len(val) >= 2 {
+		val = val[1 : len(val)-1]
+	}
+	return res.Success(common.String{Value: val, Context: context}.SetPos(nodeToken.PosStart, nodeToken.PosEnd))
 }
 
 func (i *Interpreter) VisitDictionaryNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
-	nodeDictionary := node.(common.DictionaryNode)
+	nodeDictionary, ok := node.(common.DictionaryNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected dictionary node", context))
+	}
 
 	for _, v := range nodeDictionary.VariableDiBuat {
 		res.Register(i.Visit(v, context))
@@ -78,9 +151,12 @@ func (i *Interpreter) VisitDictionaryNode(node common.Expr, context *common.Cont
 
 func (i *Interpreter) VisitListNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
-	nodeList := node.(common.ListNode)
-	elements := make([]common.Value, 0)
+	nodeList, ok := node.(common.ListNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected list node", context))
+	}
 
+	elements := make([]common.Value, 0, len(nodeList.ElementNode))
 	for _, v := range nodeList.ElementNode {
 		elements = append(elements, res.Register(i.Visit(v, context)))
 		if res.ShouldReturn() {
@@ -88,47 +164,48 @@ func (i *Interpreter) VisitListNode(node common.Expr, context *common.Context) c
 		}
 	}
 
-	Listvalue := common.List{
+	listValue := common.List{
 		Elements: elements,
 	}
-	Listvalue.Set_pos(nodeList.Pos_Start, nodeList.Pos_End)
-	Listvalue.Set_context(context)
-	return res.Success(Listvalue)
+	listValue.SetPos(nodeList.Pos_Start, nodeList.Pos_End)
+	listValue.SetContext(context)
+	return res.Success(listValue)
 }
 
 func (i *Interpreter) VisitVarAccessNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
-	nodeVarAccessNode := node.(common.VarAccessNode)
+	nodeVarAccessNode, ok := node.(common.VarAccessNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected variable access node", context))
+	}
 
-	var_name := nodeVarAccessNode.VarNameTok.Value
-	value := context.Symbol_Table.Get(var_name)
+	varName := nodeVarAccessNode.VarNameTok.Value
+	value := context.GetSymbolTable().Get(varName)
 	if value == nil {
 		value = common.Null{}
 	}
 
-	switch value.(type) {
-	case common.Null:
-		return res.Failure(common.RTError(*node.GetPosStart(), *node.GetPosEnd(), fmt.Sprintf("'%s' is not defined", var_name), context))
+	if _, isNull := value.(common.Null); isNull {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), fmt.Sprintf("'%s' is not defined", varName), context))
 	}
 
-	value = value.Copy().Set_pos(nodeVarAccessNode.Pos_Start, nodeVarAccessNode.Pos_end).Set_context(context)
-
+	value = value.Copy().SetPos(nodeVarAccessNode.Pos_Start, nodeVarAccessNode.Pos_end).SetContext(context)
 	return res.Success(value)
 }
 
 func (i *Interpreter) VisitVarAssignNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
-	nodeVarAssignNode := node.(common.VarAssignNode)
+	nodeVarAssignNode, ok := node.(common.VarAssignNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected variable assign node", context))
+	}
 
-	// var_name := nodeVarAssignNode.VarName.Value
 	value := res.Register(i.Visit(nodeVarAssignNode.ValueNode, context))
-
 	if res.ShouldReturn() {
 		return res
 	}
 
-	// If the value is a Type definition, initialize it to get the default value
-	if typeDef, ok := value.(common.Type); ok {
+	if typeDef, isType := value.(common.Type); isType {
 		value = res.Register(i.InitializeType(typeDef.Definition, context))
 		if res.ShouldReturn() {
 			return res
@@ -141,102 +218,104 @@ func (i *Interpreter) VisitVarAssignNode(node common.Expr, context *common.Conte
 			return res.Failure(*err)
 		}
 		if baseTypeName != "" {
-			context.Symbol_Table.Set("VariableType "+nodeVarAssignNode.VarName.Value, common.String{Value: baseTypeName})
+			context.GetSymbolTable().Set("VariableType "+nodeVarAssignNode.VarName.Value, common.String{Value: baseTypeName, Context: context})
 		}
 	}
 
-	res.Register(i.GantiVariable(nodeVarAssignNode.VarName.Value, value, context, nodeVarAssignNode.ApakahConst, nodeVarAssignNode.Pos_Start.Copy(), nodeVarAssignNode.Pos_end.Copy()))
+	res.Register(i.AssignVariable(nodeVarAssignNode.VarName.Value, value, context, nodeVarAssignNode.ApakahConst, nodeVarAssignNode.Pos_Start.Copy(), nodeVarAssignNode.Pos_end.Copy()))
 	if res.Error != nil {
 		return res
 	}
-	// context.Symbol_Table.Set(var_name, value)
 
 	return res.Success(value)
 }
 
 func (i *Interpreter) VisitBinOpNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
-	nodeBinary := node.(common.BinOpNode)
-	left := res.Register(i.Visit(nodeBinary.Left, context))
+	nodeBinary, ok := node.(common.BinOpNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected binary operation node", context))
+	}
 
+	left := res.Register(i.Visit(nodeBinary.Left, context))
 	if res.ShouldReturn() {
 		return res
 	}
 
 	right := res.Register(i.Visit(nodeBinary.Right, context))
-
 	if res.ShouldReturn() {
 		return res
 	}
 
 	var hasil common.Value = common.Null{}
 	var err *common.Error
-	switch left := left.(type) {
+
+	switch l := left.(type) {
 	case common.Number:
 		switch nodeBinary.Operator.Kind {
 		case lexer.PLUS:
-			hasil, err = left.Added_to(right)
+			hasil, err = l.Add(right)
 		case lexer.DASH:
-			hasil, err = left.Subbed_by(right)
+			hasil, err = l.Subtract(right)
 		case lexer.STAR:
-			hasil, err = left.Multed_by(right)
+			hasil, err = l.Multiply(right)
 		case lexer.SLASH:
-			hasil, err = left.Divided_by(right)
+			hasil, err = l.Divide(right)
 		case lexer.DIV:
-			hasil, err = left.DivBy(right)
+			hasil, err = l.Div(right)
 		case lexer.PERCENT:
-			hasil, err = left.ModBy(right)
+			hasil, err = l.Mod(right)
 		case lexer.POWER:
-			hasil, err = left.Powered_by(right)
+			hasil, err = l.Power(right)
 		case lexer.EQUALS:
-			hasil, err = left.Get_comparison_eq(right)
+			hasil, err = l.Equal(right)
 		case lexer.NOT_EQUALS:
-			hasil, err = left.Get_comparison_nq(right)
+			hasil, err = l.NotEqual(right)
 		case lexer.LESS:
-			hasil, err = left.Get_comparison_lt(right)
+			hasil, err = l.Less(right)
 		case lexer.LESS_EQUALS:
-			hasil, err = left.Get_comparison_lte(right)
+			hasil, err = l.LessEqual(right)
 		case lexer.GREATER:
-			hasil, err = left.Get_comparison_gt(right)
+			hasil, err = l.Greater(right)
 		case lexer.GREATER_EQUALS:
-			hasil, err = left.Get_comparison_gte(right)
+			hasil, err = l.GreaterEqual(right)
 		case lexer.AND:
-			hasil, err = left.Anded_by(right)
+			hasil, err = l.And(right)
 		case lexer.OR:
-			hasil, err = left.Ored_by(right)
+			hasil, err = l.Or(right)
 		}
 	case common.String:
 		switch nodeBinary.Operator.Kind {
 		case lexer.PLUS:
-			hasil, err = left.Added_to(right)
+			hasil, err = l.Add(right)
 		case lexer.STAR:
-			hasil, err = left.Multed_by(right)
+			hasil, err = l.Multiply(right)
 		case lexer.EQUALS:
-			hasil, err = left.Get_comparison_eq(right)
+			hasil, err = l.Equal(right)
 		case lexer.NOT_EQUALS:
-			hasil, err = left.Get_comparison_nq(right)
+			hasil, err = l.NotEqual(right)
 		}
 	case common.List:
 		switch nodeBinary.Operator.Kind {
 		case lexer.PLUS:
-			hasil, err = left.Added_to(right)
+			hasil, err = l.Add(right)
 		case lexer.DASH:
-			hasil, err = left.Subbed_to(right)
+			hasil, err = l.Subtract(right)
 		case lexer.STAR:
-			hasil, err = left.Multed_by(right)
+			hasil, err = l.Multiply(right)
 		case lexer.SLASH:
-			hasil, err = left.Dived_by(right)
+			hasil, err = l.Divide(right)
 		}
 	case common.Boolean:
 		switch nodeBinary.Operator.Kind {
 		case lexer.EQUALS:
-			hasil, err = left.Get_comparison_eq(right)
+			hasil, err = l.Equal(right)
 		case lexer.NOT_EQUALS:
-			hasil, err = left.Get_comparison_nq(right)
+			hasil, err = l.NotEqual(right)
 		case lexer.AND:
-			hasil, err = left.Anded_by(right)
+			hasil, err = l.And(right)
 		case lexer.OR:
-			hasil, err = left.Ored_by(right)
+			hasil, err = l.Or(right)
 		}
 	}
 
@@ -244,64 +323,74 @@ func (i *Interpreter) VisitBinOpNode(node common.Expr, context *common.Context) 
 		return res.Failure(*err)
 	}
 
-	return res.Success(hasil.Set_pos(nodeBinary.Pos_Start, nodeBinary.Pos_End))
+	if hasil == nil {
+		hasil = common.Null{}
+	}
+
+	return res.Success(hasil.SetPos(nodeBinary.Pos_Start, nodeBinary.Pos_End))
 }
 
 func (i *Interpreter) VisitUnaryOpNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
-	nodeUnary := node.(common.UnaryOpNode)
+	nodeUnary, ok := node.(common.UnaryOpNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected unary op node", context))
+	}
 
 	val := res.Register(i.Visit(nodeUnary.Node, context))
 	if res.ShouldReturn() {
 		return res
 	}
 
-	var error *common.Error
+	var err *common.Error
 	var resultVal common.Value
 
 	switch nodeUnary.Operator.Kind {
 	case lexer.DASH:
-		if num, ok := val.(common.Number); ok {
+		if num, isNum := val.(common.Number); isNum {
 			angka := common.Number{
 				Value:  -1,
 				IsReal: num.IsReal,
 			}
-			resultVal, error = num.Multed_by(angka)
+			resultVal, err = num.Multiply(angka)
 		} else {
-			errNya := common.RTError(*nodeUnary.Operator.Pos_Start, *nodeUnary.Operator.Pos_End, "Illegal operation: unary minus expects a number", context)
+			errNya := common.RTError(safePos(nodeUnary.Operator.PosStart), safePos(nodeUnary.Operator.PosEnd), "Illegal operation: unary minus expects a number", context)
 			return res.Failure(errNya)
 		}
 	case lexer.NOT:
 		switch v := val.(type) {
 		case common.Number:
-			resultVal, error = v.Notted()
+			resultVal, err = v.Not()
 		case common.Boolean:
 			resultVal = common.Boolean{Value: !v.Value, Context: context, Pos_Start: v.Pos_Start, Pos_End: v.Pos_End}
 		default:
-			errNya := common.RTError(*nodeUnary.Operator.Pos_Start, *nodeUnary.Operator.Pos_End, "Illegal operation: logic not expects a boolean or number", context)
+			errNya := common.RTError(safePos(nodeUnary.Operator.PosStart), safePos(nodeUnary.Operator.PosEnd), "Illegal operation: logic not expects a boolean or number", context)
 			return res.Failure(errNya)
 		}
 	}
 
-	if error != nil {
-		return res.Failure(*error)
+	if err != nil {
+		return res.Failure(*err)
 	}
 
-	return res.Success(resultVal.Set_pos(nodeUnary.Pos_Start, nodeUnary.Pos_End))
+	return res.Success(resultVal.SetPos(nodeUnary.Pos_Start, nodeUnary.Pos_End))
 }
 
 func (i *Interpreter) VisitIfNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
-	nodeIf := node.(common.IfNode)
+	nodeIf, ok := node.(common.IfNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected if node", context))
+	}
 
 	for _, ifCase := range nodeIf.Cases {
-		condition_value := res.Register(i.Visit(ifCase.Kondisi, context))
+		conditionVal := res.Register(i.Visit(ifCase.Kondisi, context))
 		if res.ShouldReturn() {
 			return res
 		}
 
-		if condition_value.Is_true() {
-			expr_value := res.Register(i.Visit(ifCase.Isi, context))
+		if conditionVal.IsTrue() {
+			exprVal := res.Register(i.Visit(ifCase.Isi, context))
 			if res.ShouldReturn() {
 				return res
 			}
@@ -310,13 +399,12 @@ func (i *Interpreter) VisitIfNode(node common.Expr, context *common.Context) com
 				return res.Success(common.Null{})
 			}
 
-			return res.Success(expr_value)
+			return res.Success(exprVal)
 		}
 	}
 
-	if nodeIf.Else_case.Isi != nil {
-		isi := nodeIf.Else_case.Isi
-		else_value := res.Register(i.Visit(isi, context))
+	if nodeIf.Else_case != nil && nodeIf.Else_case.Isi != nil {
+		elseVal := res.Register(i.Visit(nodeIf.Else_case.Isi, context))
 		if res.ShouldReturn() {
 			return res
 		}
@@ -324,7 +412,7 @@ func (i *Interpreter) VisitIfNode(node common.Expr, context *common.Context) com
 		if nodeIf.Else_case.ShouldReturnNull {
 			return res.Success(common.Null{})
 		}
-		return res.Success(else_value)
+		return res.Success(elseVal)
 	}
 
 	return res.Success(common.Null{})
@@ -332,17 +420,27 @@ func (i *Interpreter) VisitIfNode(node common.Expr, context *common.Context) com
 
 func (i *Interpreter) VisitForNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
-	elements := make([]common.Value, 0)
+	nodeFor, ok := node.(common.ForNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected for node", context))
+	}
 
-	nodeFor := node.(common.ForNode)
-	startValue := res.Register(i.Visit(nodeFor.StartValueNode, context)).(common.Number)
+	startRes := res.Register(i.Visit(nodeFor.StartValueNode, context))
 	if res.ShouldReturn() {
 		return res
 	}
+	startValue, ok := startRes.(common.Number)
+	if !ok {
+		return res.Failure(common.RTError(safePos(nodeFor.StartValueNode.GetPosStart()), safePos(nodeFor.StartValueNode.GetPosEnd()), "Start value in 'for' loop must be a number", context))
+	}
 
-	endValue := res.Register(i.Visit(nodeFor.EndValueNode, context)).(common.Number)
+	endRes := res.Register(i.Visit(nodeFor.EndValueNode, context))
 	if res.ShouldReturn() {
 		return res
+	}
+	endValue, ok := endRes.(common.Number)
+	if !ok {
+		return res.Failure(common.RTError(safePos(nodeFor.EndValueNode.GetPosStart()), safePos(nodeFor.EndValueNode.GetPosEnd()), "End value in 'for' loop must be a number", context))
 	}
 
 	var stepValue common.Number
@@ -354,40 +452,43 @@ func (i *Interpreter) VisitForNode(node common.Expr, context *common.Context) co
 			stepValue = common.Number{Value: 1, IsReal: false}
 		}
 	default:
-		stepValue = res.Register(i.Visit(nodeFor.StepValueNode, context)).(common.Number)
-		if nodeFor.IsDown && stepValue.Value > 0 {
-			stepValue.Value = -stepValue.Value
-		}
-
+		stepRes := res.Register(i.Visit(nodeFor.StepValueNode, context))
 		if res.ShouldReturn() {
 			return res
 		}
+		stepNum, isNum := stepRes.(common.Number)
+		if !isNum {
+			return res.Failure(common.RTError(safePos(nodeFor.StepValueNode.GetPosStart()), safePos(nodeFor.StepValueNode.GetPosEnd()), "Step value in 'for' loop must be a number", context))
+		}
+		stepValue = stepNum
+		if nodeFor.IsDown && stepValue.Value > 0 {
+			stepValue.Value = -stepValue.Value
+		}
 	}
 
+	elements := make([]common.Value, 0)
 	iteration := int(startValue.Value)
 
 	var kondisi func(iteration int, endValue int) bool
 	if stepValue.Value >= 0 {
-		kondisi = func(iteration, endValue int) bool {
-			return iteration <= endValue
+		kondisi = func(iter, end int) bool {
+			return iter <= end
 		}
 	} else {
-		kondisi = func(iteration, endValue int) bool {
-			return iteration >= endValue
+		kondisi = func(iter, end int) bool {
+			return iter >= end
 		}
 	}
 
 	for kondisi(iteration, int(endValue.Value)) {
-		res.Register(i.GantiVariable(nodeFor.VarNameTok.Value, common.Number{Value: float64(iteration), IsReal: false}, context, false, nodeFor.VarNameTok.Pos_Start.Copy(), nodeFor.VarNameTok.Pos_End.Copy()))
+		res.Register(i.AssignVariable(nodeFor.VarNameTok.Value, common.Number{Value: float64(iteration), IsReal: false}, context, false, nodeFor.VarNameTok.PosStart.Copy(), nodeFor.VarNameTok.PosEnd.Copy()))
 		if res.Error != nil {
 			return res
 		}
 
-		// context.Symbol_Table.Set(nodeFor.VarNameTok.Value, common.Number{Value: float64(iteration)})
-
 		iteration += int(stepValue.Value)
 
-		value := res.Register(i.Visit(nodeFor.BodyNode, context))
+		val := res.Register(i.Visit(nodeFor.BodyNode, context))
 		if res.ShouldReturn() && !res.LoopShouldContinue && !res.LoopShouldBreak {
 			return res
 		}
@@ -400,25 +501,27 @@ func (i *Interpreter) VisitForNode(node common.Expr, context *common.Context) co
 			break
 		}
 
-		elements = append(elements, value)
+		elements = append(elements, val)
 	}
 
 	if nodeFor.ShouldReturnNull {
 		return res.Success(common.Null{})
 	}
 
-	ListValue := common.List{
+	listVal := common.List{
 		Elements: elements,
 	}
-	ListValue.Set_pos(nodeFor.Pos_Start, nodeFor.Pos_end)
-	ListValue.Set_context(context)
-
-	return res.Success(ListValue)
+	listVal.SetPos(nodeFor.Pos_Start, nodeFor.Pos_end)
+	listVal.SetContext(context)
+	return res.Success(listVal)
 }
 
 func (i *Interpreter) VisitWhileNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
-	nodeWhile := node.(common.WhileNode)
+	nodeWhile, ok := node.(common.WhileNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected while node", context))
+	}
 	elements := make([]common.Value, 0)
 
 	for {
@@ -427,7 +530,7 @@ func (i *Interpreter) VisitWhileNode(node common.Expr, context *common.Context) 
 			return res
 		}
 
-		if !kondisi.Is_true() {
+		if !kondisi.IsTrue() {
 			break
 		}
 
@@ -451,21 +554,24 @@ func (i *Interpreter) VisitWhileNode(node common.Expr, context *common.Context) 
 		return res.Success(common.Null{})
 	}
 
-	ListValue := common.List{
+	listValue := common.List{
 		Elements: elements,
 	}
-	ListValue.Set_pos(nodeWhile.Pos_Start, nodeWhile.Pos_end)
-	ListValue.Set_context(context)
-	return res.Success(ListValue)
+	listValue.SetPos(nodeWhile.Pos_Start, nodeWhile.Pos_end)
+	listValue.SetContext(context)
+	return res.Success(listValue)
 }
 
 func (i *Interpreter) VisitRepeatNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
-	nodeWhile := node.(common.RepeatNode)
+	nodeRepeat, ok := node.(common.RepeatNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected repeat node", context))
+	}
 	elements := make([]common.Value, 0)
 
 	for {
-		value := res.Register(i.Visit(nodeWhile.BodyNode, context))
+		value := res.Register(i.Visit(nodeRepeat.BodyNode, context))
 		if res.ShouldReturn() && !res.LoopShouldContinue && !res.LoopShouldBreak {
 			return res
 		}
@@ -478,44 +584,47 @@ func (i *Interpreter) VisitRepeatNode(node common.Expr, context *common.Context)
 			break
 		}
 
-		kondisi := res.Register(i.Visit(nodeWhile.KondisiNode, context))
+		kondisi := res.Register(i.Visit(nodeRepeat.KondisiNode, context))
 		if res.ShouldReturn() {
 			return res
 		}
 
-		if kondisi.Is_true() {
+		if kondisi.IsTrue() {
 			break
 		}
 
 		elements = append(elements, value)
 	}
 
-	if nodeWhile.ShouldReturnNull {
+	if nodeRepeat.ShouldReturnNull {
 		return res.Success(common.Null{})
 	}
 
-	ListValue := common.List{
+	listValue := common.List{
 		Elements: elements,
 	}
-	ListValue.Set_pos(nodeWhile.Pos_Start, nodeWhile.Pos_end)
-	ListValue.Set_context(context)
-	return res.Success(ListValue)
+	listValue.SetPos(nodeRepeat.Pos_Start, nodeRepeat.Pos_end)
+	listValue.SetContext(context)
+	return res.Success(listValue)
 }
 
 func (i *Interpreter) VisitFuncNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
-	nodeFunc := node.(common.FuncNode)
-	var PosStart *tools.Position
-	var PosEnd *tools.Position
+	nodeFunc, ok := node.(common.FuncNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected func node", context))
+	}
+	var posStart *tools.Position
+	var posEnd *tools.Position
 
 	funcName := "anonymous"
 	if nodeFunc.VarNameTok != nil {
 		funcName = nodeFunc.VarNameTok.Value
-		PosStart = nodeFunc.VarNameTok.Pos_Start.Copy()
-		PosEnd = nodeFunc.VarNameTok.Pos_End.Copy()
+		posStart = nodeFunc.VarNameTok.PosStart.Copy()
+		posEnd = nodeFunc.VarNameTok.PosEnd.Copy()
 	}
 
-	argNames := make([]string, 0)
+	argNames := make([]string, 0, len(nodeFunc.ArgNameToks))
 	for _, argName := range nodeFunc.ArgNameToks {
 		argNames = append(argNames, argName.Value)
 	}
@@ -532,11 +641,10 @@ func (i *Interpreter) VisitFuncNode(node common.Expr, context *common.Context) c
 	}
 
 	if nodeFunc.VarNameTok != nil {
-		res.Register(i.GantiVariable(funcName, funcValue, context, false, PosStart, PosEnd))
+		res.Register(i.AssignVariable(funcName, funcValue, context, false, posStart, posEnd))
 		if res.Error != nil {
 			return res
 		}
-		// context.Symbol_Table.Set(funcName, funcValue)
 	}
 
 	if nodeFunc.ShouldAutoReturn {
@@ -548,16 +656,19 @@ func (i *Interpreter) VisitFuncNode(node common.Expr, context *common.Context) c
 
 func (i *Interpreter) VisitCallNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
-	args := make([]common.Value, 0)
-	rawArgs := make([]common.Expr, 0)
-	nodeCall := node.(common.CallNode)
+	nodeCall, ok := node.(common.CallNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected call node", context))
+	}
 
-	value_to_call := res.Register(i.Visit(nodeCall.NodeToCall, context))
+	valueToCall := res.Register(i.Visit(nodeCall.NodeToCall, context))
 	if res.ShouldReturn() {
 		return res
 	}
-	value_to_call = value_to_call.Copy().Set_pos(nodeCall.Pos_Start, nodeCall.Pos_end)
+	valueToCall = valueToCall.Copy().SetPos(nodeCall.Pos_Start, nodeCall.Pos_end)
 
+	rawArgs := make([]common.Expr, 0, len(nodeCall.ArgNodes))
+	args := make([]common.Value, 0, len(nodeCall.ArgNodes))
 	for _, argNode := range nodeCall.ArgNodes {
 		rawArgs = append(rawArgs, argNode)
 		args = append(args, res.Register(i.Visit(argNode, context)))
@@ -567,40 +678,43 @@ func (i *Interpreter) VisitCallNode(node common.Expr, context *common.Context) c
 	}
 
 	var returnValue common.Value
-	switch value_to_call := value_to_call.(type) {
+	switch fn := valueToCall.(type) {
 	case common.BuiltInFunction:
-		returnValue = res.Register(value_to_call.Execute(args, rawArgs))
+		returnValue = res.Register(fn.Execute(args, rawArgs))
 		if res.ShouldReturn() {
 			return res
 		}
 		if returnValue != nil {
-			if returnValueContext := returnValue.Get_context(); returnValueContext != nil {
+			if retCtx := returnValue.GetContext(); retCtx != nil {
 				for _, v := range rawArgs {
-					switch v := v.(type) {
-					case common.VarAccessNode:
-						res.Register(i.GantiVariable(v.VarNameTok.Value, returnValueContext.Symbol_Table.Get(v.VarNameTok.Value), context, false, nil, nil))
-						if res.Error != nil {
-							return res
+					if va, ok := v.(common.VarAccessNode); ok {
+						newVal := retCtx.GetSymbolTable().Get(va.VarNameTok.Value)
+						if newVal != nil {
+							res.Register(i.AssignVariable(va.VarNameTok.Value, newVal, context, false, nil, nil))
+							if res.Error != nil {
+								return res
+							}
 						}
-						// context.Symbol_Table.Set(v.VarNameTok.Value, returnValueContext.Symbol_Table.Get(v.VarNameTok.Value))
 					}
 				}
 			}
 		}
-	default: //Normal Function
-		returnValue = res.Register(i.Execute(value_to_call, context, args))
+	default:
+		returnValue = res.Register(i.Execute(fn, context, args))
 	}
 	if res.ShouldReturn() {
 		return res
 	}
-	returnValue = returnValue.Copy().Set_pos(nodeCall.Pos_Start, nodeCall.Pos_end).Set_context(context)
-
+	returnValue = returnValue.Copy().SetPos(nodeCall.Pos_Start, nodeCall.Pos_end).SetContext(context)
 	return res.Success(returnValue)
 }
 
 func (i *Interpreter) VisitReturnNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
-	nodeReturn := node.(common.ReturnNode)
+	nodeReturn, ok := node.(common.ReturnNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected return node", context))
+	}
 
 	var value common.Value = common.Null{}
 	if nodeReturn.NodeToReturn != nil {
@@ -610,32 +724,33 @@ func (i *Interpreter) VisitReturnNode(node common.Expr, context *common.Context)
 		}
 	}
 
-	return res.Success_Return(value)
+	return res.SuccessReturn(value)
 }
 
-func (i *Interpreter) VisitContinueNode(node common.Expr, context *common.Context) common.Value {
+func (i *Interpreter) VisitContinueNode(_ common.Expr, _ *common.Context) common.Value {
 	res := &common.RTResult{}
-	return res.Success_Continue()
+	return res.SuccessContinue()
 }
 
-func (i *Interpreter) VisitBreakNode(node common.Expr, context *common.Context) common.Value {
+func (i *Interpreter) VisitBreakNode(_ common.Expr, _ *common.Context) common.Value {
 	res := &common.RTResult{}
-	return res.Success_Break()
+	return res.SuccessBreak()
 }
 
 func (i *Interpreter) Execute(node common.Value, context *common.Context, args []common.Value) common.Value {
 	res := &common.RTResult{}
-	inter := Interpreter{}
-	nodeFunc := node.(common.BaseFunctionInterface)
+	nodeFunc, ok := node.(common.BaseFunctionInterface)
+	if !ok {
+		return res.Failure(common.RTError(tools.Position{}, tools.Position{}, "Object is not callable", context))
+	}
 
-	exec_ctx := nodeFunc.GenerateNewContext()
-
-	res.Register(nodeFunc.CheckAndPopulateArgs(nodeFunc.GetArgsName(), args, &exec_ctx))
+	execCtx := nodeFunc.GenerateNewContext()
+	res.Register(nodeFunc.CheckAndPopulateArgs(nodeFunc.GetArgsName(), args, &execCtx))
 	if res.ShouldReturn() {
 		return res
 	}
 
-	value := res.Register(inter.Visit(nodeFunc.GetBodyNode(), &exec_ctx))
+	value := res.Register(i.Visit(nodeFunc.GetBodyNode(), &execCtx))
 	if res.ShouldReturn() && res.FuncReturnValue == nil {
 		return res
 	}
@@ -651,60 +766,62 @@ func (i *Interpreter) Execute(node common.Value, context *common.Context, args [
 	return res.Success(res.FuncReturnValue)
 }
 
-func (i *Interpreter) GantiVariable(varName string, value common.Value, context *common.Context, apakahKonst bool, posStart *tools.Position, posend *tools.Position) common.Value {
+// AssignVariable buat nge-assign nilai variabel plus proteksi konstanta & validasi tipe data.
+func (i *Interpreter) AssignVariable(varName string, value common.Value, context *common.Context, isConst bool, posStart *tools.Position, posEnd *tools.Position) common.Value {
 	res := &common.RTResult{}
-	apakahAdaKonst := context.Symbol_Table.Get("ApakahKonstant " + varName)
+	st := context.GetSymbolTable()
+	isConstVal := st.Get("ApakahKonstant " + varName)
 
-	if apakahAdaKonst == nil {
-		hasil := 0.0
-		if apakahKonst {
-			hasil = 1.0
+	if isConstVal == nil {
+		flag := 0.0
+		if isConst {
+			flag = 1.0
 			if posStart != nil {
-				context.Symbol_Table.Set("ConstDeclLine "+varName, common.Number{Value: float64(posStart.Ln + 1), IsReal: false})
+				st.Set("ConstDeclLine "+varName, common.Number{Value: float64(posStart.Ln + 1), IsReal: false, Context: context})
 			}
 		}
-
-		context.Symbol_Table.Set("ApakahKonstant "+varName, common.Number{Value: hasil, IsReal: false})
+		st.Set("ApakahKonstant "+varName, common.Number{Value: flag, IsReal: false, Context: context})
 	}
 
-	if apakahAdaKonst != nil && apakahAdaKonst.(common.Number).Value == 1 {
-		var start, end tools.Position
-		if posStart != nil {
-			start = *posStart
-		}
-		if posend != nil {
-			end = *posend
-		}
-		declLineMsg := ""
-		declLineVal := context.Symbol_Table.Get("ConstDeclLine " + varName)
-		if declLineVal != nil {
-			if num, ok := declLineVal.(common.Number); ok {
-				declLineMsg = fmt.Sprintf(" (declared at line %d)", int(num.Value))
+	if isConstVal != nil {
+		if num, ok := isConstVal.(common.Number); ok && num.Value == 1 {
+			var start, end tools.Position
+			if posStart != nil {
+				start = *posStart
 			}
+			if posEnd != nil {
+				end = *posEnd
+			}
+			declLineMsg := ""
+			declLineVal := st.Get("ConstDeclLine " + varName)
+			if declLineVal != nil {
+				if dNum, ok := declLineVal.(common.Number); ok {
+					declLineMsg = fmt.Sprintf(" (declared at line %d)", int(dNum.Value))
+				}
+			}
+			return res.Failure(common.RTError(start, end, fmt.Sprintf("Constant variable '%s' can not be assigned!%s", varName, declLineMsg), context))
 		}
-		return res.Failure(common.RTError(start, end, fmt.Sprintf("Constant variable '%s' can not be assigned!%s", varName, declLineMsg), context))
 	}
 
-	// Check declared type of variable
-	declaredTypeVal := context.Symbol_Table.Get("VariableType " + varName)
+	// Cek deklarasi tipe variabel biar ga salah assign tipe
+	declaredTypeVal := st.Get("VariableType " + varName)
 	if declaredTypeVal != nil {
 		if declaredTypeStr, ok := declaredTypeVal.(common.String); ok {
-			if declaredTypeStr.Value == "integer" {
-				// Variable is integer, check if assigned value is a real number
+			switch declaredTypeStr.Value {
+			case "integer":
 				if num, ok := value.(common.Number); ok {
 					if num.IsReal || num.Value != math.Floor(num.Value) {
 						var start, end tools.Position
 						if posStart != nil {
 							start = *posStart
 						}
-						if posend != nil {
-							end = *posend
+						if posEnd != nil {
+							end = *posEnd
 						}
 						return res.Failure(common.RTError(start, end, fmt.Sprintf("Type mismatch: cannot assign real number to integer variable '%s'", varName), context))
 					}
 				}
-			} else if declaredTypeStr.Value == "real" {
-				// Variable is real, promote assigned number value to real
+			case "real":
 				if num, ok := value.(common.Number); ok {
 					num.IsReal = true
 					value = num
@@ -713,14 +830,21 @@ func (i *Interpreter) GantiVariable(varName string, value common.Value, context 
 		}
 	}
 
-	context.Symbol_Table.Set(varName, value)
-
+	st.Set(varName, value)
 	return res.Success(common.Null{})
+}
+
+// GantiVariable alias buat backward compatibility.
+func (i *Interpreter) GantiVariable(varName string, value common.Value, context *common.Context, isConst bool, posStart *tools.Position, posEnd *tools.Position) common.Value {
+	return i.AssignVariable(varName, value, context, isConst, posStart, posEnd)
 }
 
 func (i *Interpreter) VisitArrayTypeNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
-	arrayNode := node.(common.ArrayTypeNode)
+	arrayNode, ok := node.(common.ArrayTypeNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected array type node", context))
+	}
 
 	startVal := res.Register(i.Visit(arrayNode.StartNode, context))
 	if res.ShouldReturn() {
@@ -732,19 +856,21 @@ func (i *Interpreter) VisitArrayTypeNode(node common.Expr, context *common.Conte
 		return res
 	}
 
-	if _, ok := startVal.(common.Number); !ok {
-		return res.Failure(common.RTError(*arrayNode.StartNode.GetPosStart(), *arrayNode.StartNode.GetPosEnd(), "Start index must be a number", context))
+	startNum, ok1 := startVal.(common.Number)
+	if !ok1 {
+		return res.Failure(common.RTError(safePos(arrayNode.StartNode.GetPosStart()), safePos(arrayNode.StartNode.GetPosEnd()), "Start index must be a number", context))
 	}
-	if _, ok := endVal.(common.Number); !ok {
-		return res.Failure(common.RTError(*arrayNode.EndNode.GetPosStart(), *arrayNode.EndNode.GetPosEnd(), "End index must be a number", context))
+	endNum, ok2 := endVal.(common.Number)
+	if !ok2 {
+		return res.Failure(common.RTError(safePos(arrayNode.EndNode.GetPosStart()), safePos(arrayNode.EndNode.GetPosEnd()), "End index must be a number", context))
 	}
 
-	start := int(startVal.(common.Number).Value)
-	end := int(endVal.(common.Number).Value)
+	start := int(startNum.Value)
+	end := int(endNum.Value)
 	size := end - start + 1
 
 	if size < 0 {
-		return res.Failure(common.RTError(*node.GetPosStart(), *node.GetPosEnd(), "Array start index must be less than or equal to end index", context))
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Array start index must be less than or equal to end index", context))
 	}
 
 	elements := make([]common.Value, size)
@@ -768,7 +894,10 @@ func (i *Interpreter) VisitArrayTypeNode(node common.Expr, context *common.Conte
 
 func (i *Interpreter) VisitArrayIndexNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
-	indexNode := node.(common.ArrayIndexNode)
+	indexNode, ok := node.(common.ArrayIndexNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected array index node", context))
+	}
 
 	left := res.Register(i.Visit(indexNode.Left, context))
 	if res.ShouldReturn() {
@@ -780,37 +909,42 @@ func (i *Interpreter) VisitArrayIndexNode(node common.Expr, context *common.Cont
 		return res
 	}
 
-	switch left := left.(type) {
+	switch l := left.(type) {
 	case common.Array:
-		if _, ok := indexVal.(common.Number); !ok {
-			return res.Failure(common.RTError(*indexNode.Index.GetPosStart(), *indexNode.Index.GetPosEnd(), "Array index must be a number", context))
+		num, ok := indexVal.(common.Number)
+		if !ok {
+			return res.Failure(common.RTError(safePos(indexNode.Index.GetPosStart()), safePos(indexNode.Index.GetPosEnd()), "Array index must be a number", context))
 		}
 
-		index := int(indexVal.(common.Number).Value)
-		if index < left.Start || index > left.End {
-			return res.Failure(common.RTError(*indexNode.Index.GetPosStart(), *indexNode.Index.GetPosEnd(), fmt.Sprintf("Index %d out of bounds [%d..%d]", index, left.Start, left.End), context))
+		index := int(num.Value)
+		if index < l.Start || index > l.End {
+			return res.Failure(common.RTError(safePos(indexNode.Index.GetPosStart()), safePos(indexNode.Index.GetPosEnd()), fmt.Sprintf("Index %d out of bounds [%d..%d]", index, l.Start, l.End), context))
 		}
 
-		return res.Success(left.Elements[index-left.Start])
+		return res.Success(l.Elements[index-l.Start])
 	case common.String:
-		if _, ok := indexVal.(common.Number); !ok {
-			return res.Failure(common.RTError(*indexNode.Index.GetPosStart(), *indexNode.Index.GetPosEnd(), "String index must be a number", context))
+		num, ok := indexVal.(common.Number)
+		if !ok {
+			return res.Failure(common.RTError(safePos(indexNode.Index.GetPosStart()), safePos(indexNode.Index.GetPosEnd()), "String index must be a number", context))
 		}
 
-		index := int(indexVal.(common.Number).Value)
-		if index < 1 || index > len(left.Value) {
-			return res.Failure(common.RTError(*indexNode.Index.GetPosStart(), *indexNode.Index.GetPosEnd(), fmt.Sprintf("String index %d out of bounds [1..%d]", index, len(left.Value)), context))
+		index := int(num.Value)
+		if index < 1 || index > len(l.Value) {
+			return res.Failure(common.RTError(safePos(indexNode.Index.GetPosStart()), safePos(indexNode.Index.GetPosEnd()), fmt.Sprintf("String index %d out of bounds [1..%d]", index, len(l.Value)), context))
 		}
 
-		return res.Success(common.String{Value: string(left.Value[index-1]), Context: context})
+		return res.Success(common.String{Value: string(l.Value[index-1]), Context: context})
 	default:
-		return res.Failure(common.RTError(*indexNode.Left.GetPosStart(), *indexNode.Left.GetPosEnd(), "Left hand side is not indexable", context))
+		return res.Failure(common.RTError(safePos(indexNode.Left.GetPosStart()), safePos(indexNode.Left.GetPosEnd()), "Left hand side is not indexable", context))
 	}
 }
 
 func (i *Interpreter) VisitArrayAssignNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
-	assignNode := node.(common.ArrayAssignNode)
+	assignNode, ok := node.(common.ArrayAssignNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected array assign node", context))
+	}
 
 	left := res.Register(i.Visit(assignNode.ArrayAccess.Left, context))
 	if res.ShouldReturn() {
@@ -829,25 +963,30 @@ func (i *Interpreter) VisitArrayAssignNode(node common.Expr, context *common.Con
 
 	array, ok := left.(common.Array)
 	if !ok {
-		return res.Failure(common.RTError(*assignNode.ArrayAccess.Left.GetPosStart(), *assignNode.ArrayAccess.Left.GetPosEnd(), "Left hand side is not an array", context))
+		return res.Failure(common.RTError(safePos(assignNode.ArrayAccess.Left.GetPosStart()), safePos(assignNode.ArrayAccess.Left.GetPosEnd()), "Left hand side is not an array", context))
 	}
 
-	if _, ok := indexVal.(common.Number); !ok {
-		return res.Failure(common.RTError(*assignNode.ArrayAccess.Index.GetPosStart(), *assignNode.ArrayAccess.Index.GetPosEnd(), "Array index must be a number", context))
+	num, ok := indexVal.(common.Number)
+	if !ok {
+		return res.Failure(common.RTError(safePos(assignNode.ArrayAccess.Index.GetPosStart()), safePos(assignNode.ArrayAccess.Index.GetPosEnd()), "Array index must be a number", context))
 	}
 
-	index := int(indexVal.(common.Number).Value)
+	index := int(num.Value)
 	if index < array.Start || index > array.End {
-		return res.Failure(common.RTError(*assignNode.ArrayAccess.Index.GetPosStart(), *assignNode.ArrayAccess.Index.GetPosEnd(), fmt.Sprintf("Index %d out of bounds [%d..%d]", index, array.Start, array.End), context))
+		return res.Failure(common.RTError(safePos(assignNode.ArrayAccess.Index.GetPosStart()), safePos(assignNode.ArrayAccess.Index.GetPosEnd()), fmt.Sprintf("Index %d out of bounds [%d..%d]", index, array.Start, array.End), context))
 	}
 
 	array.Elements[index-array.Start] = value
+	i.writeBack(assignNode.ArrayAccess.Left, array, context)
 	return res.Success(value)
 }
 
 func (i *Interpreter) VisitMemberAccessNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
-	accessNode := node.(common.MemberAccessNode)
+	accessNode, ok := node.(common.MemberAccessNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected member access node", context))
+	}
 	object := res.Register(i.Visit(accessNode.Object, context))
 	if res.ShouldReturn() {
 		return res
@@ -855,12 +994,12 @@ func (i *Interpreter) VisitMemberAccessNode(node common.Expr, context *common.Co
 
 	structVal, ok := object.(common.Struct)
 	if !ok {
-		return res.Failure(common.RTError(*accessNode.Object.GetPosStart(), *accessNode.Object.GetPosEnd(), "Object is not a struct", context))
+		return res.Failure(common.RTError(safePos(accessNode.Object.GetPosStart()), safePos(accessNode.Object.GetPosEnd()), "Object is not a struct", context))
 	}
 
 	val, ok := structVal.Fields[accessNode.MemberTok.Value]
 	if !ok {
-		return res.Failure(common.RTError(*accessNode.MemberTok.Pos_Start, *accessNode.MemberTok.Pos_End, fmt.Sprintf("Field '%s' not found in struct", accessNode.MemberTok.Value), context))
+		return res.Failure(common.RTError(safePos(accessNode.MemberTok.PosStart), safePos(accessNode.MemberTok.PosEnd), fmt.Sprintf("Field '%s' not found in struct", accessNode.MemberTok.Value), context))
 	}
 
 	return res.Success(val)
@@ -868,7 +1007,10 @@ func (i *Interpreter) VisitMemberAccessNode(node common.Expr, context *common.Co
 
 func (i *Interpreter) VisitMemberAssignNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
-	assignNode := node.(common.MemberAssignNode)
+	assignNode, ok := node.(common.MemberAssignNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected member assign node", context))
+	}
 
 	object := res.Register(i.Visit(assignNode.MemberAccess.Object, context))
 	if res.ShouldReturn() {
@@ -882,40 +1024,72 @@ func (i *Interpreter) VisitMemberAssignNode(node common.Expr, context *common.Co
 
 	structVal, ok := object.(common.Struct)
 	if !ok {
-		return res.Failure(common.RTError(*assignNode.MemberAccess.Object.GetPosStart(), *assignNode.MemberAccess.Object.GetPosEnd(), "Object is not a struct", context))
+		return res.Failure(common.RTError(safePos(assignNode.MemberAccess.Object.GetPosStart()), safePos(assignNode.MemberAccess.Object.GetPosEnd()), "Object is not a struct", context))
 	}
 
-	if _, ok := structVal.Fields[assignNode.MemberAccess.MemberTok.Value]; !ok {
-		return res.Failure(common.RTError(*assignNode.MemberAccess.MemberTok.Pos_Start, *assignNode.MemberAccess.MemberTok.Pos_End, fmt.Sprintf("Field '%s' not found in struct", assignNode.MemberAccess.MemberTok.Value), context))
+	if _, exists := structVal.Fields[assignNode.MemberAccess.MemberTok.Value]; !exists {
+		return res.Failure(common.RTError(safePos(assignNode.MemberAccess.MemberTok.PosStart), safePos(assignNode.MemberAccess.MemberTok.PosEnd), fmt.Sprintf("Field '%s' not found in struct", assignNode.MemberAccess.MemberTok.Value), context))
 	}
 
 	structVal.Fields[assignNode.MemberAccess.MemberTok.Value] = value
+	i.writeBack(assignNode.MemberAccess.Object, structVal, context)
 	return res.Success(value)
+}
+
+func (i *Interpreter) writeBack(target common.Expr, updatedValue common.Value, context *common.Context) {
+	switch t := target.(type) {
+	case common.VarAccessNode:
+		context.GetSymbolTable().Set(t.VarNameTok.Value, updatedValue)
+	case common.ArrayIndexNode:
+		parentVal := i.Visit(t.Left, context)
+		if parentArr, ok := parentVal.(common.Array); ok {
+			idxVal := i.Visit(t.Index, context)
+			if num, ok := idxVal.(common.Number); ok {
+				idx := int(num.Value)
+				if idx >= parentArr.Start && idx <= parentArr.End {
+					parentArr.Elements[idx-parentArr.Start] = updatedValue
+					i.writeBack(t.Left, parentArr, context)
+				}
+			}
+		}
+	case common.MemberAccessNode:
+		parentVal := i.Visit(t.Object, context)
+		if parentStruct, ok := parentVal.(common.Struct); ok {
+			parentStruct.Fields[t.MemberTok.Value] = updatedValue
+			i.writeBack(t.Object, parentStruct, context)
+		}
+	}
 }
 
 func (i *Interpreter) VisitTypeAliasNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
-	aliasNode := node.(common.TypeAliasNode)
+	aliasNode, ok := node.(common.TypeAliasNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected type alias node", context))
+	}
 	typeValue := common.Type{
 		Definition: aliasNode.TargetType,
 		Context:    context,
 		Pos_Start:  aliasNode.Pos_Start,
 		Pos_End:    aliasNode.Pos_End,
 	}
-	context.Symbol_Table.Set(aliasNode.AliasName.Value, typeValue)
+	context.GetSymbolTable().Set(aliasNode.AliasName.Value, typeValue)
 	return res.Success(common.Null{})
 }
 
 func (i *Interpreter) VisitStructTypeNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
-	structNode := node.(common.StructTypeNode)
+	structNode, ok := node.(common.StructTypeNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected struct type node", context))
+	}
 	typeValue := common.Type{
 		Definition: structNode,
 		Context:    context,
 		Pos_Start:  structNode.Pos_Start,
 		Pos_End:    structNode.Pos_End,
 	}
-	context.Symbol_Table.Set(structNode.StructName.Value, typeValue)
+	context.GetSymbolTable().Set(structNode.StructName.Value, typeValue)
 	return res.Success(common.Null{})
 }
 
@@ -937,11 +1111,11 @@ func (i *Interpreter) InitializeType(typeNode common.Expr, context *common.Conte
 		case "char":
 			return res.Success(common.String{Value: " ", Context: context})
 		default:
-			val := context.Symbol_Table.Get(typeName)
+			val := context.GetSymbolTable().Get(typeName)
 			if typeDef, ok := val.(common.Type); ok {
 				return i.InitializeType(typeDef.Definition, context)
 			}
-			return res.Failure(common.RTError(*t.GetPosStart(), *t.GetPosEnd(), fmt.Sprintf("Unknown type '%s'", typeName), context))
+			return res.Failure(common.RTError(safePos(t.GetPosStart()), safePos(t.GetPosEnd()), fmt.Sprintf("Unknown type '%s'", typeName), context))
 		}
 	case common.ArrayTypeNode:
 		startVal := res.Register(i.Visit(t.StartNode, context))
@@ -953,8 +1127,17 @@ func (i *Interpreter) InitializeType(typeNode common.Expr, context *common.Conte
 			return res
 		}
 
-		start := int(startVal.(common.Number).Value)
-		end := int(endVal.(common.Number).Value)
+		startNum, ok1 := startVal.(common.Number)
+		if !ok1 {
+			return res.Failure(common.RTError(safePos(t.StartNode.GetPosStart()), safePos(t.StartNode.GetPosEnd()), "Start index must be a number", context))
+		}
+		endNum, ok2 := endVal.(common.Number)
+		if !ok2 {
+			return res.Failure(common.RTError(safePos(t.EndNode.GetPosStart()), safePos(t.EndNode.GetPosEnd()), "End index must be a number", context))
+		}
+
+		start := int(startNum.Value)
+		end := int(endNum.Value)
 		size := end - start + 1
 		elements := make([]common.Value, size)
 
@@ -995,14 +1178,13 @@ func (i *Interpreter) InitializeType(typeNode common.Expr, context *common.Conte
 }
 
 func (i *Interpreter) GetBaseTypeName(typeNode common.Expr, context *common.Context) (string, *common.Error) {
-	switch t := typeNode.(type) {
-	case common.VarAccessNode:
+	if t, ok := typeNode.(common.VarAccessNode); ok {
 		typeName := t.VarNameTok.Value
 		switch typeName {
 		case "integer", "real", "string", "boolean", "char":
 			return typeName, nil
 		default:
-			val := context.Symbol_Table.Get(typeName)
+			val := context.GetSymbolTable().Get(typeName)
 			if typeDef, ok := val.(common.Type); ok {
 				return i.GetBaseTypeName(typeDef.Definition, context)
 			}
@@ -1013,6 +1195,13 @@ func (i *Interpreter) GetBaseTypeName(typeNode common.Expr, context *common.Cont
 }
 
 func valuesAreEqual(v1, v2 common.Value) bool {
+	if v1 == nil && v2 == nil {
+		return true
+	}
+	if v1 == nil || v2 == nil {
+		return false
+	}
+
 	n1, ok1 := v1.(common.Number)
 	n2, ok2 := v2.(common.Number)
 	if ok1 && ok2 {
@@ -1036,7 +1225,10 @@ func valuesAreEqual(v1, v2 common.Value) bool {
 
 func (i *Interpreter) VisitDependNode(node common.Expr, context *common.Context) common.Value {
 	res := &common.RTResult{}
-	dependNode := node.(common.DependNode)
+	dependNode, ok := node.(common.DependNode)
+	if !ok {
+		return res.Failure(common.RTError(safePos(node.GetPosStart()), safePos(node.GetPosEnd()), "Expected depend node", context))
+	}
 
 	var switchVal common.Value
 	if dependNode.Value != nil {
@@ -1063,7 +1255,7 @@ func (i *Interpreter) VisitDependNode(node common.Expr, context *common.Context)
 				return res.Success(val)
 			}
 		} else {
-			if caseVal.Is_true() {
+			if caseVal.IsTrue() {
 				matched = true
 				val := res.Register(i.Visit(c.Body, context))
 				if res.ShouldReturn() {
