@@ -6,6 +6,7 @@ import (
 	"fmt"
 )
 
+// Expr itu interface utama yang wajib diimplement sama semua AST node.
 type Expr interface {
 	expr()
 	GetPosStart() *tools.Position
@@ -14,27 +15,29 @@ type Expr interface {
 	Name() string
 }
 
+// Token ini wrapper AST buat token dari lexer.
 type Token struct {
 	Kind      lexer.TokenKind
 	Value     string
-	Pos_Start *tools.Position
+	Pos_Start *tools.Position // Dijaga biar tetep kompatibel sama struktur AST
 	Pos_End   *tools.Position
 }
 
-func (token Token) expr() {}
-func (token Token) Print() string {
-	return token.Value
+func (t Token) expr() {}
+func (t Token) Print() string {
+	return t.Value
 }
-func (n Token) Name() string {
+func (t Token) Name() string {
 	return "Token"
 }
-func (n Token) GetPosStart() *tools.Position {
-	return n.Pos_Start
+func (t Token) GetPosStart() *tools.Position {
+	return t.Pos_Start
 }
-func (n Token) GetPosEnd() *tools.Position {
-	return n.Pos_End
+func (t Token) GetPosEnd() *tools.Position {
+	return t.Pos_End
 }
 
+// ParseResult buat nyimpen hasil parsing di tiap step (node, error, plus tracking advance token).
 type ParseResult struct {
 	Error                      *Error
 	Node                       Expr
@@ -46,72 +49,82 @@ type ParseResult struct {
 	Pos_End                    *tools.Position
 }
 
-func (parseResult *ParseResult) Register_Advancement() {
-	parseResult.LastRegisteredAdvanceCount = 1
-	parseResult.AdvanceCount++
+// RegisterAdvancement buat nyatet kalo parser udah advance 1 token.
+func (pr *ParseResult) RegisterAdvancement() {
+	pr.LastRegisteredAdvanceCount = 1
+	pr.AdvanceCount++
 }
 
-func (parseResult *ParseResult) Register(res interface{}) Expr {
-	switch res := res.(type) {
-	case *ParseResult:
-		parseResult.LastRegisteredAdvanceCount = res.AdvanceCount
-		parseResult.AdvanceCount += res.AdvanceCount
-		if res.Error != nil {
-			parseResult.Error = res.Error
-		}
+// Register_Advancement alias buat backward compatibility.
+func (pr *ParseResult) Register_Advancement() {
+	pr.RegisterAdvancement()
+}
 
-		return res.Node
+// Register buat nge-record progress dan error dari ParseResult lain atau Token ke dalam ParseResult ini.
+func (pr *ParseResult) Register(res any) Expr {
+	switch r := res.(type) {
+	case *ParseResult:
+		pr.LastRegisteredAdvanceCount = r.AdvanceCount
+		pr.AdvanceCount += r.AdvanceCount
+		if r.Error != nil {
+			pr.Error = r.Error
+		}
+		return r.Node
 	case lexer.Token:
-		tk := Token{ //So ugly to do, I'll try to improve it after everything is done. [18/01/2025 18:47]
-			Kind:      res.Kind,
-			Value:     res.Value,
-			Pos_Start: res.Pos_Start,
-			Pos_End:   res.Pos_End,
+		tk := Token{
+			Kind:      r.Kind,
+			Value:     r.Value,
+			Pos_Start: r.PosStart,
+			Pos_End:   r.PosEnd,
 		}
 		return tk
+	case Expr:
+		return r
 	}
-
-	return res.(Expr)
+	return nil
 }
 
-func (parseResult *ParseResult) Try_register(res interface{}) Expr {
-	switch res := res.(type) {
-	case *ParseResult:
-		if res.Error != nil {
-			parseResult.ToReverseCount = res.AdvanceCount
-			// parseResult.Error = res.Error [THIS SINGLE LINE OF CODE MADE ME STUCK FOR 2 HOURS FINDING THE BUG!!! 24/01/2025 00:11]
+// TryRegister buat nyoba register result. Kalo error, cuma nyatet backtrack count tanpa langsung commit error-nya.
+func (pr *ParseResult) TryRegister(res any) Expr {
+	if r, ok := res.(*ParseResult); ok {
+		if r.Error != nil {
+			pr.ToReverseCount = r.AdvanceCount
 			return nil
 		}
-
 	}
-
-	return parseResult.Register(res)
+	return pr.Register(res)
 }
 
-func (parseResult *ParseResult) Success(node Expr) Expr {
-	parseResult.Node = node
-	return parseResult
+// Try_register alias buat backward compatibility.
+func (pr *ParseResult) Try_register(res any) Expr {
+	return pr.TryRegister(res)
 }
 
-func (parseResult *ParseResult) Failure(error *Error) Expr {
-	if parseResult.Error == nil || parseResult.AdvanceCount == 0 {
-		parseResult.Error = error
+// Success buat nge-set node hasil parsing yang valid.
+func (pr *ParseResult) Success(node Expr) Expr {
+	pr.Node = node
+	return pr
+}
+
+// Failure buat nempelin error pas proses parsing gagal.
+func (pr *ParseResult) Failure(err *Error) Expr {
+	if pr.Error == nil || pr.AdvanceCount == 0 {
+		pr.Error = err
 	}
-
-	return parseResult
+	return pr
 }
 
-func (parseResult *ParseResult) expr() {}
-func (parseResult *ParseResult) Print() string {
-	fmt.Println(PrintValueAST(parseResult))
+func (pr *ParseResult) expr() {}
+func (pr *ParseResult) Print() string {
+	fmt.Println(PrintValueAST(pr))
 	return ""
 }
-func (n *ParseResult) Name() string {
+func (pr *ParseResult) Name() string {
 	return "ParseResult"
 }
-func (n *ParseResult) GetPosStart() *tools.Position {
-	return n.Pos_Start
+func (pr *ParseResult) GetPosStart() *tools.Position {
+	return pr.Pos_Start
 }
-func (n *ParseResult) GetPosEnd() *tools.Position {
-	return n.Pos_End
+func (pr *ParseResult) GetPosEnd() *tools.Position {
+	return pr.Pos_End
 }

@@ -6,12 +6,13 @@ import (
 	"fmt"
 )
 
+// PrintTreeAST buat nampilin visualisasi tree AST dalam bentuk ASCII tree.
 func PrintTreeAST(node Expr, indent string, last bool) {
 	if node == nil {
 		return
 	}
 
-	// If it's a ParseResult, just print its inner node
+	// Kalo node-nya ParseResult, langsung print node dalemnya aja
 	if pr, ok := node.(*ParseResult); ok {
 		PrintTreeAST(pr.Node, indent, last)
 		return
@@ -25,10 +26,8 @@ func PrintTreeAST(node Expr, indent string, last bool) {
 	fmt.Print(indent)
 	fmt.Print(marker)
 
-	// Print name and some info
 	info := ""
 	var children []Expr
-	var childNames []string
 
 	switch n := node.(type) {
 	case NumberNode:
@@ -40,44 +39,30 @@ func PrintTreeAST(node Expr, indent string, last bool) {
 	case BinOpNode:
 		info = fmt.Sprintf(": %s", n.Operator.Value)
 		children = []Expr{n.Left, n.Right}
-		childNames = []string{"Left", "Right"}
 	case UnaryOpNode:
 		info = fmt.Sprintf(": %s", n.Operator.Value)
 		children = []Expr{n.Node}
-		childNames = []string{"Node"}
 	case VarAssignNode:
 		info = fmt.Sprintf(": %s", n.VarName.Value)
 		children = []Expr{n.ValueNode}
-		childNames = []string{"Value"}
 	case ListNode:
-		for i, v := range n.ElementNode {
-			children = append(children, v)
-			childNames = append(childNames, fmt.Sprintf("[%d]", i))
-		}
+		children = append(children, n.ElementNode...)
 	case DictionaryNode:
-		for i, v := range n.VariableDiBuat {
-			children = append(children, v)
-			childNames = append(childNames, fmt.Sprintf("Var[%d]", i))
-		}
+		children = append(children, n.VariableDiBuat...)
 	case IfNode:
-		for i, c := range n.Cases {
+		for _, c := range n.Cases {
 			children = append(children, c.Kondisi, c.Isi)
-			childNames = append(childNames, fmt.Sprintf("Cond[%d]", i), fmt.Sprintf("Body[%d]", i))
 		}
-		if n.Else_case != nil {
+		if n.Else_case != nil && n.Else_case.Isi != nil {
 			children = append(children, n.Else_case.Isi)
-			childNames = append(childNames, "Else")
 		}
 	case WhileNode:
 		children = []Expr{n.KondisiNode, n.BodyNode}
-		childNames = []string{"Condition", "Body"}
 	case ForNode:
 		info = fmt.Sprintf(": %s", n.VarNameTok.Value)
 		children = []Expr{n.StartValueNode, n.EndValueNode, n.StepValueNode, n.BodyNode}
-		childNames = []string{"Start", "End", "Step", "Body"}
 	case RepeatNode:
 		children = []Expr{n.BodyNode, n.KondisiNode}
-		childNames = []string{"Body", "Condition"}
 	case FuncNode:
 		name := "<anonymous>"
 		if n.VarNameTok != nil {
@@ -92,43 +77,42 @@ func PrintTreeAST(node Expr, indent string, last bool) {
 		}
 		info = fmt.Sprintf(": %s(%s)", name, args)
 		children = []Expr{n.BodyNode}
-		childNames = []string{"Body"}
 	case CallNode:
 		children = append(children, n.NodeToCall)
-		childNames = append(childNames, "Callee")
-		for i, arg := range n.ArgNodes {
-			children = append(children, arg)
-			childNames = append(childNames, fmt.Sprintf("Arg[%d]", i))
-		}
+		children = append(children, n.ArgNodes...)
 	case ArrayIndexNode:
 		children = []Expr{n.Left, n.Index}
-		childNames = []string{"Array", "Index"}
 	case ArrayAssignNode:
 		children = []Expr{n.ArrayAccess, n.ValueNode}
-		childNames = []string{"Target", "Value"}
 	case ArrayTypeNode:
 		children = []Expr{n.StartNode, n.EndNode, n.OfType}
-		childNames = []string{"Start", "End", "Type"}
 	case MemberAccessNode:
 		info = fmt.Sprintf(": .%s", n.MemberTok.Value)
 		children = []Expr{n.Object}
-		childNames = []string{"Object"}
 	case MemberAssignNode:
 		children = []Expr{n.MemberAccess, n.ValueNode}
-		childNames = []string{"Target", "Value"}
 	case TypeAliasNode:
 		info = fmt.Sprintf(": %s", n.AliasName.Value)
 		children = []Expr{n.TargetType}
-		childNames = []string{"TargetType"}
 	case StructTypeNode:
 		info = fmt.Sprintf(": %s", n.StructName.Value)
-		for i, field := range n.Fields {
+		for _, field := range n.Fields {
 			children = append(children, field)
-			childNames = append(childNames, fmt.Sprintf("Field[%d]", i))
+		}
+	case DependNode:
+		if n.Value != nil {
+			children = append(children, n.Value)
+		}
+		for _, c := range n.Cases {
+			children = append(children, c.Value, c.Body)
+		}
+		if n.DefaultCase != nil {
+			children = append(children, n.DefaultCase)
 		}
 	case ReturnNode:
-		children = []Expr{n.NodeToReturn}
-		childNames = []string{"Value"}
+		if n.NodeToReturn != nil {
+			children = []Expr{n.NodeToReturn}
+		}
 	}
 
 	fmt.Printf("%s%s\n", node.Name(), info)
@@ -146,6 +130,7 @@ func PrintTreeAST(node Expr, indent string, last bool) {
 	}
 }
 
+// PrintJSONAST buat nge-print AST dalam format JSON yang rapi.
 func PrintJSONAST(node Expr) {
 	m := ASTToMap(node)
 	if m == nil {
@@ -160,7 +145,8 @@ func PrintJSONAST(node Expr) {
 	fmt.Println(string(bytes))
 }
 
-func ASTToMap(node Expr) interface{} {
+// ASTToMap buat convert hierarki AST node jadi nested map biar gampang di-serialize ke JSON.
+func ASTToMap(node Expr) any {
 	if node == nil {
 		return nil
 	}
@@ -169,7 +155,7 @@ func ASTToMap(node Expr) interface{} {
 		return ASTToMap(pr.Node)
 	}
 
-	res := make(map[string]interface{})
+	res := make(map[string]any)
 	res["type"] = node.Name()
 
 	switch n := node.(type) {
@@ -195,28 +181,28 @@ func ASTToMap(node Expr) interface{} {
 		res["is_const"] = n.ApakahConst
 		res["is_declaration"] = n.ApakahDeklarasi
 	case ListNode:
-		var program []interface{}
+		var program []any
 		for _, el := range n.ElementNode {
 			program = append(program, ASTToMap(el))
 		}
 		res["program"] = program
 	case DictionaryNode:
-		var variables []interface{}
+		var variables []any
 		for _, v := range n.VariableDiBuat {
 			variables = append(variables, ASTToMap(v))
 		}
 		res["variables"] = variables
 	case IfNode:
-		var cases []interface{}
+		var cases []any
 		for _, c := range n.Cases {
-			cases = append(cases, map[string]interface{}{
+			cases = append(cases, map[string]any{
 				"condition": ASTToMap(c.Kondisi),
 				"body":      ASTToMap(c.Isi),
 			})
 		}
 		res["cases"] = cases
-		if n.Else_case != nil {
-			res["else_case"] = map[string]interface{}{
+		if n.Else_case != nil && n.Else_case.Isi != nil {
+			res["else_case"] = map[string]any{
 				"body": ASTToMap(n.Else_case.Isi),
 			}
 		} else {
@@ -249,7 +235,7 @@ func ASTToMap(node Expr) interface{} {
 		res["body"] = ASTToMap(n.BodyNode)
 	case CallNode:
 		res["call"] = ASTToMap(n.NodeToCall)
-		var args []interface{}
+		var args []any
 		for _, arg := range n.ArgNodes {
 			args = append(args, ASTToMap(arg))
 		}
@@ -275,13 +261,30 @@ func ASTToMap(node Expr) interface{} {
 		res["target_type"] = ASTToMap(n.TargetType)
 	case StructTypeNode:
 		res["struct_name"] = n.StructName.Value
-		var fields []interface{}
+		var fields []any
 		for _, field := range n.Fields {
 			fields = append(fields, ASTToMap(field))
 		}
 		res["fields"] = fields
+	case DependNode:
+		if n.Value != nil {
+			res["value"] = ASTToMap(n.Value)
+		}
+		var cases []any
+		for _, c := range n.Cases {
+			cases = append(cases, map[string]any{
+				"value": ASTToMap(c.Value),
+				"body":  ASTToMap(c.Body),
+			})
+		}
+		res["cases"] = cases
+		if n.DefaultCase != nil {
+			res["default_case"] = ASTToMap(n.DefaultCase)
+		}
 	case ReturnNode:
-		res["value"] = ASTToMap(n.NodeToReturn)
+		if n.NodeToReturn != nil {
+			res["value"] = ASTToMap(n.NodeToReturn)
+		}
 	}
 
 	return res

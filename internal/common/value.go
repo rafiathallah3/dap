@@ -7,7 +7,6 @@ import (
 	"io"
 	"math"
 	"os"
-	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,38 +19,72 @@ func safePos(p *tools.Position) tools.Position {
 	return *p
 }
 
+// SymbolTable nyimpen mapping variabel dan lexical scoping-nya (termasuk parent scope).
 type SymbolTable struct {
 	Symbols map[string]Value
 	Parent  *SymbolTable
 }
 
-func (symbolTable *SymbolTable) Get(name string) Value {
-	if val, ok := symbolTable.Symbols[name]; ok {
-		return val
+// NewSymbolTable helper buat inisialisasi SymbolTable baru plus optional parent scope.
+func NewSymbolTable(parent *SymbolTable) *SymbolTable {
+	return &SymbolTable{
+		Symbols: make(map[string]Value),
+		Parent:  parent,
 	}
+}
 
-	if symbolTable.Parent != nil {
-		return symbolTable.Parent.Get(name)
+// Get buat ngambil nilai variabel dari scope sekarang atau scope parent kalo ada.
+func (st *SymbolTable) Get(name string) Value {
+	if st == nil {
+		return nil
 	}
-
+	if st.Symbols != nil {
+		if val, ok := st.Symbols[name]; ok {
+			return val
+		}
+	}
+	if st.Parent != nil {
+		return st.Parent.Get(name)
+	}
 	return nil
 }
 
-func (symbolTable *SymbolTable) Set(name string, value Value) {
-	symbolTable.Symbols[name] = value
+// Set buat nyimpen nilai variabel ke scope sekarang (udah ada lazy map init biar ga panic).
+func (st *SymbolTable) Set(name string, value Value) {
+	if st.Symbols == nil {
+		st.Symbols = make(map[string]Value)
+	}
+	st.Symbols[name] = value
 }
 
-func (symbolTable *SymbolTable) Remove(name string) {
-	delete(symbolTable.Symbols, name)
+// Remove buat ngehapus variabel dari scope sekarang.
+func (st *SymbolTable) Remove(name string) {
+	if st.Symbols != nil {
+		delete(st.Symbols, name)
+	}
 }
 
+// Context nyimpen info scope runtime dan metadata eksekusi program.
 type Context struct {
 	DisplayName    string
 	Parent         *Context
 	ParentEntryPos *tools.Position
 	Symbol_Table   *SymbolTable
+	SymbolTable    *SymbolTable
 }
 
+// GetSymbolTable helper buat dapetin SymbolTable aktif (kompatibel dua-duanya).
+func (c *Context) GetSymbolTable() *SymbolTable {
+	if c == nil {
+		return nil
+	}
+	if c.SymbolTable != nil {
+		return c.SymbolTable
+	}
+	return c.Symbol_Table
+}
+
+// PrintValueInterpreter buat nge-format runtime Value jadi string yang rapi pas di-print.
 func PrintValueInterpreter(n Value) string {
 	switch n := n.(type) {
 	case Boolean:
@@ -71,43 +104,45 @@ func PrintValueInterpreter(n Value) string {
 		if len(n.Elements) == 1 {
 			return PrintValueInterpreter(n.Elements[0])
 		}
-
-		hasil := "["
+		var sb strings.Builder
+		sb.WriteString("[")
 		for i, v := range n.Elements {
-			hasil += PrintValueInterpreter(v)
+			sb.WriteString(PrintValueInterpreter(v))
 			if i < len(n.Elements)-1 {
-				hasil += ", "
+				sb.WriteString(", ")
 			}
 		}
-		hasil += "]"
-		return hasil
+		sb.WriteString("]")
+		return sb.String()
 	case Array:
-		hasil := "["
+		var sb strings.Builder
+		sb.WriteString("[")
 		for i, v := range n.Elements {
-			hasil += PrintValueInterpreter(v)
+			sb.WriteString(PrintValueInterpreter(v))
 			if i < len(n.Elements)-1 {
-				hasil += ", "
+				sb.WriteString(", ")
 			}
 		}
-		hasil += "]"
-		return hasil
+		sb.WriteString("]")
+		return sb.String()
 	case Function:
 		return fmt.Sprintf("<function %s>", n.Name)
 	case Struct:
-		hasil := "<"
+		var sb strings.Builder
+		sb.WriteString("<")
 		keys := make([]string, 0, len(n.Fields))
 		for k := range n.Fields {
 			keys = append(keys, k)
 		}
 		slices.Sort(keys)
 		for i, k := range keys {
-			hasil += fmt.Sprintf("%s: %v", k, PrintValueInterpreter(n.Fields[k]))
+			sb.WriteString(fmt.Sprintf("%s: %v", k, PrintValueInterpreter(n.Fields[k])))
 			if i < len(keys)-1 {
-				hasil += ", "
+				sb.WriteString(", ")
 			}
 		}
-		hasil += ">"
-		return hasil
+		sb.WriteString(">")
+		return sb.String()
 	case Type:
 		return "<type>"
 	case Null:
@@ -119,39 +154,41 @@ func PrintValueInterpreter(n Value) string {
 	return ""
 }
 
+// Value represents a runtime value in DAP.
 type Value interface {
-	Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Value
-	Set_context(context *Context) Value
-	Get_context() *Context
-	Is_true() bool
+	SetPos(posStart *tools.Position, posEnd *tools.Position) Value
+	SetContext(ctx *Context) Value
+	GetContext() *Context
+	IsTrue() bool
 	Copy() Value
 	Print() string
+
+	// Backward compatibility aliases
+	Set_pos(posStart *tools.Position, posEnd *tools.Position) Value
+	Set_context(ctx *Context) Value
+	Get_context() *Context
+	Is_true() bool
 }
 
+// Null represents the null value.
 type Null struct {
 	Context *Context
 }
 
-func (n Null) Print() string {
-	return "NULL"
+func (n Null) Print() string                                             { return "NULL" }
+func (n Null) SetPos(posStart *tools.Position, posEnd *tools.Position) Value { return n }
+func (n Null) SetContext(ctx *Context) Value                             { n.Context = ctx; return n }
+func (n Null) GetContext() *Context                                      { return n.Context }
+func (n Null) Copy() Value                                               { return Null{Context: n.Context} }
+func (n Null) IsTrue() bool                                              { return false }
+func (n Null) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
+	return n.SetPos(posStart, posEnd)
 }
-func (n Null) Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Value {
-	return n
-}
-func (n Null) Set_context(context *Context) Value {
-	return n
-}
-func (n Null) Get_context() *Context {
-	return n.Context
-}
-func (n Null) Copy() Value {
-	copy := Null{}
-	return copy
-}
-func (n Null) Is_true() bool {
-	return false
-}
+func (n Null) Set_context(ctx *Context) Value { return n.SetContext(ctx) }
+func (n Null) Get_context() *Context          { return n.GetContext() }
+func (n Null) Is_true() bool                  { return n.IsTrue() }
 
+// Boolean represents a boolean value.
 type Boolean struct {
 	Value     bool
 	Context   *Context
@@ -165,18 +202,13 @@ func (b Boolean) Print() string {
 	}
 	return "false"
 }
-func (b Boolean) Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Value {
-	b.Pos_Start = Pos_Start
-	b.Pos_End = Pos_End
+func (b Boolean) SetPos(posStart *tools.Position, posEnd *tools.Position) Value {
+	b.Pos_Start = posStart
+	b.Pos_End = posEnd
 	return b
 }
-func (b Boolean) Set_context(context *Context) Value {
-	b.Context = context
-	return b
-}
-func (b Boolean) Get_context() *Context {
-	return b.Context
-}
+func (b Boolean) SetContext(ctx *Context) Value { b.Context = ctx; return b }
+func (b Boolean) GetContext() *Context          { return b.Context }
 func (b Boolean) Copy() Value {
 	return Boolean{
 		Value:     b.Value,
@@ -185,54 +217,65 @@ func (b Boolean) Copy() Value {
 		Context:   b.Context,
 	}
 }
-func (b Boolean) Is_true() bool {
-	return b.Value
+func (b Boolean) IsTrue() bool                                              { return b.Value }
+func (b Boolean) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
+	return b.SetPos(posStart, posEnd)
 }
+func (b Boolean) Set_context(ctx *Context) Value { return b.SetContext(ctx) }
+func (b Boolean) Get_context() *Context          { return b.GetContext() }
+func (b Boolean) Is_true() bool                  { return b.IsTrue() }
 
-func (b Boolean) Get_comparison_eq(other Value) (Value, *Error) {
+func (b Boolean) Equal(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Boolean:
-		return Boolean{Value: b.Value == other.Value, Context: b.Context}.Set_pos(b.Pos_Start, b.Pos_End), nil
+		return Boolean{Value: b.Value == other.Value, Context: b.Context}.SetPos(b.Pos_Start, b.Pos_End), nil
 	case Number:
-		return Boolean{Value: b.Value == (other.Value != 0), Context: b.Context}.Set_pos(b.Pos_Start, b.Pos_End), nil
+		return Boolean{Value: b.Value == (other.Value != 0), Context: b.Context}.SetPos(b.Pos_Start, b.Pos_End), nil
 	}
 	err := RTError(safePos(b.Pos_Start), safePos(b.Pos_End), "Illegal operation: cannot compare equality with the given type", b.Context)
 	return nil, &err
 }
 
-func (b Boolean) Get_comparison_nq(other Value) (Value, *Error) {
+func (b Boolean) NotEqual(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Boolean:
-		return Boolean{Value: b.Value != other.Value, Context: b.Context}.Set_pos(b.Pos_Start, b.Pos_End), nil
+		return Boolean{Value: b.Value != other.Value, Context: b.Context}.SetPos(b.Pos_Start, b.Pos_End), nil
 	case Number:
-		return Boolean{Value: b.Value != (other.Value != 0), Context: b.Context}.Set_pos(b.Pos_Start, b.Pos_End), nil
+		return Boolean{Value: b.Value != (other.Value != 0), Context: b.Context}.SetPos(b.Pos_Start, b.Pos_End), nil
 	}
 	err := RTError(safePos(b.Pos_Start), safePos(b.Pos_End), "Illegal operation: cannot compare inequality with the given type", b.Context)
 	return nil, &err
 }
 
-func (b Boolean) Anded_by(other Value) (Value, *Error) {
+func (b Boolean) And(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Boolean:
-		return Boolean{Value: b.Value && other.Value, Context: b.Context}.Set_pos(b.Pos_Start, b.Pos_End), nil
+		return Boolean{Value: b.Value && other.Value, Context: b.Context}.SetPos(b.Pos_Start, b.Pos_End), nil
 	case Number:
-		return Boolean{Value: b.Value && (other.Value != 0), Context: b.Context}.Set_pos(b.Pos_Start, b.Pos_End), nil
+		return Boolean{Value: b.Value && (other.Value != 0), Context: b.Context}.SetPos(b.Pos_Start, b.Pos_End), nil
 	}
 	err := RTError(safePos(b.Pos_Start), safePos(b.Pos_End), "Illegal operation: cannot apply 'and' with the given type", b.Context)
 	return nil, &err
 }
 
-func (b Boolean) Ored_by(other Value) (Value, *Error) {
+func (b Boolean) Or(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Boolean:
-		return Boolean{Value: b.Value || other.Value, Context: b.Context}.Set_pos(b.Pos_Start, b.Pos_End), nil
+		return Boolean{Value: b.Value || other.Value, Context: b.Context}.SetPos(b.Pos_Start, b.Pos_End), nil
 	case Number:
-		return Boolean{Value: b.Value || (other.Value != 0), Context: b.Context}.Set_pos(b.Pos_Start, b.Pos_End), nil
+		return Boolean{Value: b.Value || (other.Value != 0), Context: b.Context}.SetPos(b.Pos_Start, b.Pos_End), nil
 	}
 	err := RTError(safePos(b.Pos_Start), safePos(b.Pos_End), "Illegal operation: cannot apply 'or' with the given type", b.Context)
 	return nil, &err
 }
 
+// Forwarding aliases for Boolean
+func (b Boolean) Get_comparison_eq(other Value) (Value, *Error) { return b.Equal(other) }
+func (b Boolean) Get_comparison_nq(other Value) (Value, *Error) { return b.NotEqual(other) }
+func (b Boolean) Anded_by(other Value) (Value, *Error)          { return b.And(other) }
+func (b Boolean) Ored_by(other Value) (Value, *Error)           { return b.Or(other) }
+
+// Array represents a fixed-size indexed array.
 type Array struct {
 	Elements  []Value
 	Start     int
@@ -242,28 +285,17 @@ type Array struct {
 	Pos_End   *tools.Position
 }
 
-func (n Array) Print() string {
-	return PrintValueInterpreter(n)
-}
-
-func (n Array) Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Value {
-	n.Pos_Start = Pos_Start
-	n.Pos_End = Pos_End
+func (n Array) Print() string { return PrintValueInterpreter(n) }
+func (n Array) SetPos(posStart *tools.Position, posEnd *tools.Position) Value {
+	n.Pos_Start = posStart
+	n.Pos_End = posEnd
 	return n
 }
-
-func (n Array) Set_context(context *Context) Value {
-	n.Context = context
-	return n
-}
-
-func (n Array) Get_context() *Context {
-	return n.Context
-}
-
+func (n Array) SetContext(ctx *Context) Value { n.Context = ctx; return n }
+func (n Array) GetContext() *Context          { return n.Context }
 func (n Array) Copy() Value {
 	return Array{
-		Elements:  n.Elements,
+		Elements:  slices.Clone(n.Elements), // Deep slice copy to prevent aliasing
 		Start:     n.Start,
 		End:       n.End,
 		Context:   n.Context,
@@ -271,11 +303,15 @@ func (n Array) Copy() Value {
 		Pos_End:   n.Pos_End,
 	}
 }
-
-func (n Array) Is_true() bool {
-	return len(n.Elements) != 0
+func (n Array) IsTrue() bool                                              { return len(n.Elements) != 0 }
+func (n Array) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
+	return n.SetPos(posStart, posEnd)
 }
+func (n Array) Set_context(ctx *Context) Value { return n.SetContext(ctx) }
+func (n Array) Get_context() *Context          { return n.GetContext() }
+func (n Array) Is_true() bool                  { return n.IsTrue() }
 
+// List represents a dynamic list of values.
 type List struct {
 	Elements  []Value
 	Context   *Context
@@ -283,86 +319,81 @@ type List struct {
 	Pos_End   *tools.Position
 }
 
-func (n List) Print() string {
-	return PrintValueInterpreter(n)
-}
-
-func (n List) Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Value {
-	n.Pos_Start = Pos_Start
-	n.Pos_End = Pos_End
+func (n List) Print() string { return PrintValueInterpreter(n) }
+func (n List) SetPos(posStart *tools.Position, posEnd *tools.Position) Value {
+	n.Pos_Start = posStart
+	n.Pos_End = posEnd
 	return n
 }
-
-func (n List) Set_context(context *Context) Value {
-	n.Context = context
-	return n
-}
-
-func (n List) Get_context() *Context {
-	return n.Context
-}
-
+func (n List) SetContext(ctx *Context) Value { n.Context = ctx; return n }
+func (n List) GetContext() *Context          { return n.Context }
 func (n List) Copy() Value {
-	copy := List{}
-	copy.Elements = n.Elements
-	copy.Pos_Start = n.Pos_Start
-	copy.Pos_End = n.Pos_End
-	copy.Context = n.Context
-	return copy
+	return List{
+		Elements:  slices.Clone(n.Elements), // Deep slice copy to prevent aliasing
+		Pos_Start: n.Pos_Start,
+		Pos_End:   n.Pos_End,
+		Context:   n.Context,
+	}
+}
+func (n List) IsTrue() bool                                              { return len(n.Elements) != 0 }
+func (n List) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
+	return n.SetPos(posStart, posEnd)
+}
+func (n List) Set_context(ctx *Context) Value { return n.SetContext(ctx) }
+func (n List) Get_context() *Context          { return n.GetContext() }
+func (n List) Is_true() bool                  { return n.IsTrue() }
+
+func (n List) Add(other Value) (Value, *Error) {
+	return List{Elements: append(slices.Clone(n.Elements), other), Context: n.Context}, nil
 }
 
-func (n List) Is_true() bool {
-	return len(n.Elements) != 0
-}
-
-func (n List) Added_to(other Value) (Value, *Error) {
-	return List{Elements: append(n.Elements, other)}.Set_context(n.Context), nil
-}
-
-func (n List) Subbed_to(other Value) (Value, *Error) {
+func (n List) Subtract(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		angka := int(other.Value)
-
-		if angka > len(n.Elements) {
-			errorNya := RTError(*other.Pos_Start, *other.Pos_End, "Elements at this index could not be removed from list because it's out of bounds", n.Context)
-			return nil, &errorNya
+		idx := int(other.Value)
+		if idx < 0 || idx >= len(n.Elements) {
+			errNya := RTError(safePos(other.Pos_Start), safePos(other.Pos_End), "Elements at this index could not be removed from list because it's out of bounds", n.Context)
+			return nil, &errNya
 		}
-
-		return List{Elements: append(n.Elements[:angka], n.Elements[angka+1:]...)}.Set_context(n.Context), nil
+		newElements := make([]Value, 0, len(n.Elements)-1)
+		newElements = append(newElements, n.Elements[:idx]...)
+		newElements = append(newElements, n.Elements[idx+1:]...)
+		return List{Elements: newElements, Context: n.Context}, nil
 	}
-
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform subtraction on List with the given type", n.Context)
 	return nil, &err
 }
 
-func (n List) Multed_by(other Value) (Value, *Error) {
+func (n List) Multiply(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case List:
-		return List{Elements: append(n.Elements, other.Elements...)}.Set_context(n.Context), nil
+		return List{Elements: append(slices.Clone(n.Elements), other.Elements...), Context: n.Context}, nil
 	}
-
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform multiplication on List with the given type", n.Context)
 	return nil, &err
 }
 
-func (n List) Dived_by(other Value) (Value, *Error) {
+func (n List) Divide(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		angka := int(other.Value)
-
-		if angka > len(n.Elements) {
-			errorNya := RTError(*other.Pos_Start, *other.Pos_End, "Elements at this index could not be retrieved from list because it's out of bounds", n.Context)
-			return nil, &errorNya
+		idx := int(other.Value)
+		if idx < 0 || idx >= len(n.Elements) {
+			errNya := RTError(safePos(other.Pos_Start), safePos(other.Pos_End), "Elements at this index could not be retrieved from list because it's out of bounds", n.Context)
+			return nil, &errNya
 		}
-
-		return n.Elements[angka], nil
+		return n.Elements[idx], nil
 	}
-
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform division on List with the given type", n.Context)
 	return nil, &err
 }
 
+// Forwarding aliases for List
+func (n List) Added_to(other Value) (Value, *Error)  { return n.Add(other) }
+func (n List) Subbed_to(other Value) (Value, *Error) { return n.Subtract(other) }
+func (n List) Multed_by(other Value) (Value, *Error) { return n.Multiply(other) }
+func (n List) Dived_by(other Value) (Value, *Error)  { return n.Divide(other) }
+
+// String represents a string value.
 type String struct {
 	Value     string
 	Context   *Context
@@ -370,76 +401,73 @@ type String struct {
 	Pos_End   *tools.Position
 }
 
-func (n String) Print() string {
-	return n.Value
+func (s String) Print() string { return s.Value }
+func (s String) SetPos(posStart *tools.Position, posEnd *tools.Position) Value {
+	s.Pos_Start = posStart
+	s.Pos_End = posEnd
+	return s
 }
-
-func (n String) Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Value {
-	n.Pos_Start = Pos_Start
-	n.Pos_End = Pos_End
-	return n
-}
-
-func (n String) Set_context(context *Context) Value {
-	n.Context = context
-	return n
-}
-
-func (n String) Get_context() *Context {
-	return n.Context
-}
-
-func (n String) Copy() Value {
+func (s String) SetContext(ctx *Context) Value { s.Context = ctx; return s }
+func (s String) GetContext() *Context          { return s.Context }
+func (s String) Copy() Value {
 	return String{
-		Value:     n.Value,
-		Pos_Start: n.Pos_Start,
-		Pos_End:   n.Pos_End,
-		Context:   n.Context,
+		Value:     s.Value,
+		Pos_Start: s.Pos_Start,
+		Pos_End:   s.Pos_End,
+		Context:   s.Context,
 	}
 }
-
-func (n String) Is_true() bool {
-	return n.Value != ""
+func (s String) IsTrue() bool                                              { return s.Value != "" }
+func (s String) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
+	return s.SetPos(posStart, posEnd)
 }
+func (s String) Set_context(ctx *Context) Value { return s.SetContext(ctx) }
+func (s String) Get_context() *Context          { return s.GetContext() }
+func (s String) Is_true() bool                  { return s.IsTrue() }
 
-func (s String) Added_to(other Value) (Value, *Error) {
+func (s String) Add(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case String:
-		return String{Value: s.Value + other.Value}.Set_context(s.Context), nil
+		return String{Value: s.Value + other.Value, Context: s.Context}, nil
 	}
-
 	err := RTError(safePos(s.Pos_Start), safePos(s.Pos_End), "Illegal operation: cannot concatenate String with the given type", s.Context)
 	return nil, &err
 }
 
-func (s String) Multed_by(other Value) (Value, *Error) {
+func (s String) Multiply(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return String{Value: strings.Repeat(s.Value, int(other.Value))}.Set_context(s.Context), nil
+		return String{Value: strings.Repeat(s.Value, int(other.Value)), Context: s.Context}, nil
 	}
-
 	err := RTError(safePos(s.Pos_Start), safePos(s.Pos_End), "Illegal operation: cannot multiply String with the given type", s.Context)
 	return nil, &err
 }
 
-func (s String) Get_comparison_eq(other Value) (Value, *Error) {
+func (s String) Equal(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case String:
-		return Boolean{Value: s.Value == other.Value, Context: s.Context}.Set_pos(s.Pos_Start, s.Pos_End), nil
+		return Boolean{Value: s.Value == other.Value, Context: s.Context}.SetPos(s.Pos_Start, s.Pos_End), nil
 	}
 	err := RTError(safePos(s.Pos_Start), safePos(s.Pos_End), "Illegal operation: cannot compare equality with the given type", s.Context)
 	return nil, &err
 }
 
-func (s String) Get_comparison_nq(other Value) (Value, *Error) {
+func (s String) NotEqual(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case String:
-		return Boolean{Value: s.Value != other.Value, Context: s.Context}.Set_pos(s.Pos_Start, s.Pos_End), nil
+		return Boolean{Value: s.Value != other.Value, Context: s.Context}.SetPos(s.Pos_Start, s.Pos_End), nil
 	}
 	err := RTError(safePos(s.Pos_Start), safePos(s.Pos_End), "Illegal operation: cannot compare inequality with the given type", s.Context)
 	return nil, &err
 }
 
+// Forwarding aliases for String
+func (s String) Added_to(other Value) (Value, *Error)          { return s.Add(other) }
+func (s String) Multed_by(other Value) (Value, *Error)         { return s.Multiply(other) }
+func (s String) Get_comparison_eq(other Value) (Value, *Error) { return s.Equal(other) }
+func (s String) Get_comparison_nq(other Value) (Value, *Error) { return s.NotEqual(other) }
+
+// Number represents integer and real numerical values.
 type Number struct {
 	Value     float64
 	IsReal    bool
@@ -448,25 +476,14 @@ type Number struct {
 	Pos_End   *tools.Position
 }
 
-func (n Number) Print() string {
-	return PrintValueInterpreter(n)
-}
-
-func (n Number) Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Value {
-	n.Pos_Start = Pos_Start
-	n.Pos_End = Pos_End
+func (n Number) Print() string { return PrintValueInterpreter(n) }
+func (n Number) SetPos(posStart *tools.Position, posEnd *tools.Position) Value {
+	n.Pos_Start = posStart
+	n.Pos_End = posEnd
 	return n
 }
-
-func (n Number) Set_context(context *Context) Value {
-	n.Context = context
-	return n
-}
-
-func (n Number) Get_context() *Context {
-	return n.Context
-}
-
+func (n Number) SetContext(ctx *Context) Value { n.Context = ctx; return n }
+func (n Number) GetContext() *Context          { return n.Context }
 func (n Number) Copy() Value {
 	return Number{
 		Value:     n.Value,
@@ -476,38 +493,42 @@ func (n Number) Copy() Value {
 		Context:   n.Context,
 	}
 }
+func (n Number) IsTrue() bool                                              { return n.Value != 0 }
+func (n Number) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
+	return n.SetPos(posStart, posEnd)
+}
+func (n Number) Set_context(ctx *Context) Value { return n.SetContext(ctx) }
+func (n Number) Get_context() *Context          { return n.GetContext() }
+func (n Number) Is_true() bool                  { return n.IsTrue() }
 
-func (n Number) Added_to(other Value) (Value, *Error) {
+func (n Number) Add(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Number{Value: n.Value + other.Value, IsReal: n.IsReal || other.IsReal}.Set_context(n.Context), nil
+		return Number{Value: n.Value + other.Value, IsReal: n.IsReal || other.IsReal, Context: n.Context}, nil
 	}
-
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform addition with the given type", n.Context)
 	return nil, &err
 }
 
-func (n Number) Subbed_by(other Value) (Value, *Error) {
+func (n Number) Subtract(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Number{Value: n.Value - other.Value, IsReal: n.IsReal || other.IsReal}.Set_context(n.Context), nil
+		return Number{Value: n.Value - other.Value, IsReal: n.IsReal || other.IsReal, Context: n.Context}, nil
 	}
-
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform subtraction with the given type", n.Context)
 	return nil, &err
 }
 
-func (n Number) Multed_by(other Value) (Value, *Error) {
+func (n Number) Multiply(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Number{Value: n.Value * other.Value, IsReal: n.IsReal || other.IsReal}.Set_context(n.Context), nil
+		return Number{Value: n.Value * other.Value, IsReal: n.IsReal || other.IsReal, Context: n.Context}, nil
 	}
-
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform multiplication with the given type", n.Context)
 	return nil, &err
 }
 
-func (n Number) Divided_by(other Value) (Value, *Error) {
+func (n Number) Divide(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
 		if !n.IsReal || !other.IsReal {
@@ -515,17 +536,16 @@ func (n Number) Divided_by(other Value) (Value, *Error) {
 			return nil, &err
 		}
 		if other.Value == 0 {
-			err := RTError(*other.Pos_Start, *other.Pos_End, "Division by zero", n.Context)
+			err := RTError(safePos(other.Pos_Start), safePos(other.Pos_End), "Division by zero", n.Context)
 			return other, &err
 		}
-		return Number{Value: n.Value / other.Value, IsReal: true}.Set_context(n.Context), nil
+		return Number{Value: n.Value / other.Value, IsReal: true, Context: n.Context}, nil
 	}
-
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform division with the given type", n.Context)
 	return nil, &err
 }
 
-func (n Number) DivBy(other Value) (Value, *Error) {
+func (n Number) Div(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
 		if n.IsReal || other.IsReal {
@@ -533,147 +553,156 @@ func (n Number) DivBy(other Value) (Value, *Error) {
 			return nil, &err
 		}
 		if other.Value == 0 {
-			err := RTError(*other.Pos_Start, *other.Pos_End, "Division by zero", n.Context)
+			err := RTError(safePos(other.Pos_Start), safePos(other.Pos_End), "Division by zero", n.Context)
 			return other, &err
 		}
-		return Number{Value: math.Floor(n.Value / other.Value), IsReal: false}.Set_context(n.Context), nil
+		return Number{Value: math.Floor(n.Value / other.Value), IsReal: false, Context: n.Context}, nil
 	}
-
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform division with the given type", n.Context)
 	return nil, &err
 }
 
-func (n Number) ModBy(other Value) (Value, *Error) {
+func (n Number) Mod(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
 		if other.Value == 0 {
-			err := RTError(*other.Pos_Start, *other.Pos_End, "Division by zero", n.Context)
+			err := RTError(safePos(other.Pos_Start), safePos(other.Pos_End), "Division by zero", n.Context)
 			return other, &err
 		}
-		return Number{Value: math.Mod(n.Value, other.Value), IsReal: n.IsReal || other.IsReal}.Set_context(n.Context), nil
+		return Number{Value: math.Mod(n.Value, other.Value), IsReal: n.IsReal || other.IsReal, Context: n.Context}, nil
 	}
-
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform modulo with the given type", n.Context)
 	return nil, &err
 }
 
-func (n Number) Powered_by(other Value) (Value, *Error) {
+func (n Number) Power(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Number{Value: math.Pow(n.Value, other.Value), IsReal: n.IsReal || other.IsReal}.Set_context(n.Context), nil
+		return Number{Value: math.Pow(n.Value, other.Value), IsReal: n.IsReal || other.IsReal, Context: n.Context}, nil
 	}
-
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform exponentiation with the given type", n.Context)
 	return nil, &err
 }
 
-func (n Number) Get_comparison_eq(other Value) (Value, *Error) {
+func (n Number) Equal(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Boolean{Value: n.Value == other.Value, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
+		return Boolean{Value: n.Value == other.Value, Context: n.Context}.SetPos(n.Pos_Start, n.Pos_End), nil
 	case Boolean:
-		return Boolean{Value: (n.Value != 0) == other.Value, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
+		return Boolean{Value: (n.Value != 0) == other.Value, Context: n.Context}.SetPos(n.Pos_Start, n.Pos_End), nil
 	}
-
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot compare equality with the given type", n.Context)
 	return nil, &err
 }
 
-func (n Number) Get_comparison_nq(other Value) (Value, *Error) {
+func (n Number) NotEqual(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Boolean{Value: n.Value != other.Value, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
+		return Boolean{Value: n.Value != other.Value, Context: n.Context}.SetPos(n.Pos_Start, n.Pos_End), nil
 	case Boolean:
-		return Boolean{Value: (n.Value != 0) != other.Value, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
+		return Boolean{Value: (n.Value != 0) != other.Value, Context: n.Context}.SetPos(n.Pos_Start, n.Pos_End), nil
 	}
-
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot compare inequality with the given type", n.Context)
 	return nil, &err
 }
 
-func (n Number) Get_comparison_lt(other Value) (Value, *Error) {
+func (n Number) Less(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Boolean{Value: n.Value < other.Value, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
+		return Boolean{Value: n.Value < other.Value, Context: n.Context}.SetPos(n.Pos_Start, n.Pos_End), nil
 	}
-
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot compare with the given type", n.Context)
 	return nil, &err
 }
 
-func (n Number) Get_comparison_lte(other Value) (Value, *Error) {
+func (n Number) LessEqual(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Boolean{Value: n.Value <= other.Value, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
+		return Boolean{Value: n.Value <= other.Value, Context: n.Context}.SetPos(n.Pos_Start, n.Pos_End), nil
 	}
-
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot compare with the given type", n.Context)
 	return nil, &err
 }
 
-func (n Number) Get_comparison_gt(other Value) (Value, *Error) {
+func (n Number) Greater(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Boolean{Value: n.Value > other.Value, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
+		return Boolean{Value: n.Value > other.Value, Context: n.Context}.SetPos(n.Pos_Start, n.Pos_End), nil
 	}
-
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot compare with the given type", n.Context)
 	return nil, &err
 }
 
-func (n Number) Get_comparison_gte(other Value) (Value, *Error) {
+func (n Number) GreaterEqual(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Boolean{Value: n.Value >= other.Value, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
+		return Boolean{Value: n.Value >= other.Value, Context: n.Context}.SetPos(n.Pos_Start, n.Pos_End), nil
 	}
-
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot compare with the given type", n.Context)
 	return nil, &err
 }
 
-func (n Number) Anded_by(other Value) (Value, *Error) {
+func (n Number) And(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Boolean{Value: n.Value != 0 && other.Value != 0, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
+		return Boolean{Value: n.Value != 0 && other.Value != 0, Context: n.Context}.SetPos(n.Pos_Start, n.Pos_End), nil
 	case Boolean:
-		return Boolean{Value: n.Value != 0 && other.Value, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
+		return Boolean{Value: n.Value != 0 && other.Value, Context: n.Context}.SetPos(n.Pos_Start, n.Pos_End), nil
 	}
-
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot apply 'and' with the given type", n.Context)
 	return nil, &err
 }
 
-func (n Number) Ored_by(other Value) (Value, *Error) {
+func (n Number) Or(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		return Boolean{Value: n.Value != 0 || other.Value != 0, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
+		return Boolean{Value: n.Value != 0 || other.Value != 0, Context: n.Context}.SetPos(n.Pos_Start, n.Pos_End), nil
 	case Boolean:
-		return Boolean{Value: n.Value != 0 || other.Value, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
+		return Boolean{Value: n.Value != 0 || other.Value, Context: n.Context}.SetPos(n.Pos_Start, n.Pos_End), nil
 	}
-
 	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot apply 'or' with the given type", n.Context)
 	return nil, &err
 }
 
-func (n Number) Notted() (Value, *Error) {
-	return Boolean{Value: n.Value == 0, Context: n.Context}.Set_pos(n.Pos_Start, n.Pos_End), nil
+func (n Number) Not() (Value, *Error) {
+	return Boolean{Value: n.Value == 0, Context: n.Context}.SetPos(n.Pos_Start, n.Pos_End), nil
 }
 
-func (n Number) Is_true() bool {
-	return n.Value != 0
+// Forwarding aliases for Number
+func (n Number) Added_to(other Value) (Value, *Error)          { return n.Add(other) }
+func (n Number) Subbed_by(other Value) (Value, *Error)         { return n.Subtract(other) }
+func (n Number) Multed_by(other Value) (Value, *Error)         { return n.Multiply(other) }
+func (n Number) Divided_by(other Value) (Value, *Error)        { return n.Divide(other) }
+func (n Number) DivBy(other Value) (Value, *Error)             { return n.Div(other) }
+func (n Number) ModBy(other Value) (Value, *Error)             { return n.Mod(other) }
+func (n Number) Powered_by(other Value) (Value, *Error)        { return n.Power(other) }
+func (n Number) Get_comparison_eq(other Value) (Value, *Error) { return n.Equal(other) }
+func (n Number) Get_comparison_nq(other Value) (Value, *Error) { return n.NotEqual(other) }
+func (n Number) Get_comparison_lt(other Value) (Value, *Error) { return n.Less(other) }
+func (n Number) Get_comparison_lte(other Value) (Value, *Error) {
+	return n.LessEqual(other)
 }
+func (n Number) Get_comparison_gt(other Value) (Value, *Error) { return n.Greater(other) }
+func (n Number) Get_comparison_gte(other Value) (Value, *Error) {
+	return n.GreaterEqual(other)
+}
+func (n Number) Anded_by(other Value) (Value, *Error) { return n.And(other) }
+func (n Number) Ored_by(other Value) (Value, *Error)  { return n.Or(other) }
+func (n Number) Notted() (Value, *Error)              { return n.Not() }
 
+// BaseFunctionInterface is implemented by functions.
 type BaseFunctionInterface interface {
 	Value
 	GenerateNewContext() Context
-	CheckArgs(ArgNames []string, args []Value) Value
-	PopulateArgs(ArgNames []string, args []Value, exec_ctx *Context)
-	CheckAndPopulateArgs(ArgNames []string, args []Value, exec_ctx *Context) Value
+	CheckArgs(argNames []string, args []Value) Value
+	PopulateArgs(argNames []string, args []Value, execCtx *Context)
+	CheckAndPopulateArgs(argNames []string, args []Value, execCtx *Context) Value
 	GetArgsName() []string
 	GetBodyNode() Expr
 	GetShouldAutoReturn() bool
 }
 
+// BaseFunction provides common fields and methods for user and builtin functions.
 type BaseFunction struct {
 	Name             string
 	ArgNames         []string
@@ -684,457 +713,359 @@ type BaseFunction struct {
 	Context          *Context
 }
 
-func (n BaseFunction) Print() string {
-	return fmt.Sprintf("<function %s>", n.Name)
-}
-func (n BaseFunction) Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Value {
-	n.Pos_Start = Pos_Start
-	n.Pos_End = Pos_End
+func (n BaseFunction) Print() string { return fmt.Sprintf("<function %s>", n.Name) }
+func (n BaseFunction) SetPos(posStart *tools.Position, posEnd *tools.Position) Value {
+	n.Pos_Start = posStart
+	n.Pos_End = posEnd
 	return n
 }
-func (n BaseFunction) Set_context(context *Context) Value {
-	n.Context = context
-	return n
-}
-func (n BaseFunction) Get_context() *Context {
-	return n.Context
-}
+func (n BaseFunction) SetContext(ctx *Context) Value { n.Context = ctx; return n }
+func (n BaseFunction) GetContext() *Context          { return n.Context }
 func (n BaseFunction) Copy() Value {
-	copy := BaseFunction{}
-	copy.Name = n.Name
-	copy.ArgNames = n.ArgNames
-	copy.BodyNode = n.BodyNode
-	copy.ShouldAutoReturn = n.ShouldAutoReturn
-	copy.Pos_Start = n.Pos_Start
-	copy.Pos_End = n.Pos_End
-	copy.Context = n.Context
-	return copy
+	return BaseFunction{
+		Name:             n.Name,
+		ArgNames:         slices.Clone(n.ArgNames),
+		BodyNode:         n.BodyNode,
+		ShouldAutoReturn: n.ShouldAutoReturn,
+		Pos_Start:        n.Pos_Start,
+		Pos_End:          n.Pos_End,
+		Context:          n.Context,
+	}
 }
-func (n BaseFunction) Is_true() bool {
-	return true
+func (n BaseFunction) IsTrue() bool                                              { return true }
+func (n BaseFunction) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
+	return n.SetPos(posStart, posEnd)
 }
-
-func (n BaseFunction) GetArgsName() []string {
-	return n.ArgNames
-}
-
-func (n BaseFunction) GetBodyNode() Expr {
-	return n.BodyNode
-}
-
-func (n BaseFunction) GetShouldAutoReturn() bool {
-	return n.ShouldAutoReturn
-}
+func (n BaseFunction) Set_context(ctx *Context) Value { return n.SetContext(ctx) }
+func (n BaseFunction) Get_context() *Context          { return n.GetContext() }
+func (n BaseFunction) Is_true() bool                  { return n.IsTrue() }
+func (n BaseFunction) GetArgsName() []string          { return n.ArgNames }
+func (n BaseFunction) GetBodyNode() Expr              { return n.BodyNode }
+func (n BaseFunction) GetShouldAutoReturn() bool      { return n.ShouldAutoReturn }
 
 func (n BaseFunction) GenerateNewContext() Context {
-	newContext := Context{
+	var parentSymbols *SymbolTable
+	if n.Context != nil {
+		parentSymbols = n.Context.GetSymbolTable()
+	}
+	return Context{
 		DisplayName:    n.Name,
 		Parent:         n.Context,
 		ParentEntryPos: n.Pos_Start,
-		Symbol_Table: &SymbolTable{
-			Symbols: map[string]Value{},
-			Parent:  n.Context.Symbol_Table,
-		},
+		SymbolTable:    NewSymbolTable(parentSymbols),
+		Symbol_Table:   NewSymbolTable(parentSymbols),
 	}
-
-	return newContext
 }
 
-func (n BaseFunction) CheckArgs(ArgNames []string, args []Value) Value {
+func (n BaseFunction) CheckArgs(argNames []string, args []Value) Value {
 	res := &RTResult{}
 
-	if len(args) > len(ArgNames) {
-		adaSpread := false
-		for i, v := range ArgNames {
-			if i == len(ArgNames)-1 && strings.HasPrefix(v, "...") {
-				adaSpread = true
+	if len(args) > len(argNames) {
+		hasSpread := false
+		for i, v := range argNames {
+			if i == len(argNames)-1 && strings.HasPrefix(v, "...") {
+				hasSpread = true
 			}
 		}
 
-		if !adaSpread {
-			return res.Failure(RTError(*n.Pos_Start, *n.Pos_End, fmt.Sprintf("%d too many args passed into '%s'", len(args)-len(ArgNames), n.Name), n.Context))
+		if !hasSpread {
+			return res.Failure(RTError(safePos(n.Pos_Start), safePos(n.Pos_End), fmt.Sprintf("%d too many args passed into '%s'", len(args)-len(argNames), n.Name), n.Context))
 		}
 	}
 
-	if len(args) < len(ArgNames) {
-		return res.Failure(RTError(*n.Pos_Start, *n.Pos_End, fmt.Sprintf("%d too few args passed into '%s'", len(ArgNames)-len(args), n.Name), n.Context))
+	if len(args) < len(argNames) {
+		return res.Failure(RTError(safePos(n.Pos_Start), safePos(n.Pos_End), fmt.Sprintf("%d too few args passed into '%s'", len(argNames)-len(args), n.Name), n.Context))
 	}
 
 	return res.Success(Null{})
 }
 
-func (n BaseFunction) PopulateArgs(ArgNames []string, args []Value, exec_ctx *Context) {
-	for i := 0; i < len(ArgNames); i++ {
-		if i == len(ArgNames)-1 && strings.HasPrefix(ArgNames[i], "...") {
-			v := strings.ReplaceAll(ArgNames[i], "...", "")
-
-			args[i].Set_context(exec_ctx)
-			exec_ctx.Symbol_Table.Set(v, List{
+func (n BaseFunction) PopulateArgs(argNames []string, args []Value, execCtx *Context) {
+	st := execCtx.GetSymbolTable()
+	for i := 0; i < len(argNames); i++ {
+		if i == len(argNames)-1 && strings.HasPrefix(argNames[i], "...") {
+			v := strings.ReplaceAll(argNames[i], "...", "")
+			args[i].SetContext(execCtx)
+			st.Set(v, List{
 				Elements:  args[i:],
-				Context:   exec_ctx,
+				Context:   execCtx,
 				Pos_Start: n.Pos_Start,
 				Pos_End:   n.Pos_End,
 			})
-
 			continue
 		}
 
-		arg_name := ArgNames[i]
-		arg_value := args[i]
-
-		arg_value.Set_context(exec_ctx)
-		exec_ctx.Symbol_Table.Set(arg_name, arg_value)
+		argName := argNames[i]
+		argValue := args[i]
+		argValue.SetContext(execCtx)
+		st.Set(argName, argValue)
 	}
 }
 
-func (n BaseFunction) CheckAndPopulateArgs(ArgNames []string, args []Value, exec_ctx *Context) Value {
+func (n BaseFunction) CheckAndPopulateArgs(argNames []string, args []Value, execCtx *Context) Value {
 	res := &RTResult{}
 
-	res.Register(n.CheckArgs(ArgNames, args))
+	res.Register(n.CheckArgs(argNames, args))
 	if res.ShouldReturn() {
 		return res
 	}
 
-	n.PopulateArgs(ArgNames, args, exec_ctx)
+	n.PopulateArgs(argNames, args, execCtx)
 	return res.Success(Null{})
 }
 
+// Function represents a user-defined DAP function.
 type Function struct {
 	BaseFunction
 }
 
-func (n Function) Print() string {
-	return fmt.Sprintf("<function %s>", n.Name)
-}
-func (n Function) Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Value {
-	n.Pos_Start = Pos_Start
-	n.Pos_End = Pos_End
+func (n Function) Print() string { return fmt.Sprintf("<function %s>", n.Name) }
+func (n Function) SetPos(posStart *tools.Position, posEnd *tools.Position) Value {
+	n.Pos_Start = posStart
+	n.Pos_End = posEnd
 	return n
 }
-func (n Function) Set_context(context *Context) Value {
-	n.Context = context
-	return n
-}
-func (n Function) Get_context() *Context {
-	return n.Context
-}
+func (n Function) SetContext(ctx *Context) Value { n.Context = ctx; return n }
+func (n Function) GetContext() *Context          { return n.Context }
 func (n Function) Copy() Value {
-	copy := Function{}
-	copy.ArgNames = n.ArgNames
-	copy.BodyNode = n.BodyNode
-	copy.Name = n.Name
-	copy.Pos_Start = n.Pos_Start
-	copy.Pos_End = n.Pos_End
-	copy.Context = n.Context
-
-	return copy
-}
-func (n Function) Is_true() bool {
-	return true
-}
-
-type BuiltInFunction struct {
-	BaseFunction
-}
-
-func (n BuiltInFunction) Print() string {
-	return fmt.Sprintf("<function %s>", n.Name)
-}
-func (n BuiltInFunction) Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Value {
-	n.Pos_Start = Pos_Start
-	n.Pos_End = Pos_End
-	return n
-}
-func (n BuiltInFunction) Set_context(context *Context) Value {
-	n.Context = context
-	return n
-}
-func (n BuiltInFunction) Get_context() *Context {
-	return n.Context
-}
-func (n BuiltInFunction) Copy() Value {
-	copy := BuiltInFunction{}
-	copy.Name = n.Name
-	copy.Pos_Start = n.Pos_Start
-	copy.Pos_End = n.Pos_End
-	copy.Context = n.Context
-
-	return copy
-}
-func (n BuiltInFunction) Is_true() bool {
-	return true
-}
-
-func (n BuiltInFunction) Execute(args []Value, rawArgs []Expr) Value {
-	res := &RTResult{}
-	execCtx := n.GenerateNewContext()
-
-	methodName := "Execute" + n.Name
-	method := reflect.ValueOf(n).MethodByName(methodName)
-
-	if !method.IsValid() {
-		panic(fmt.Sprintf("Built-in function '%s' has no Execute%s method defined", n.Name, n.Name))
-	}
-
-	results := method.Call([]reflect.Value{})
-
-	if len(results) == 0 {
-		panic(fmt.Sprintf("Built-in function '%s' returned no results", n.Name))
-	}
-
-	BuiltinArgs := make([]string, results[0].Len())
-	for i := 0; i < results[0].Len(); i++ {
-		elem := results[0].Index(i)
-		BuiltinArgs[i] = elem.String()
-	}
-
-	res.Register(n.CheckAndPopulateArgs(BuiltinArgs, args, &execCtx))
-	if res.ShouldReturn() {
-		return res
-	}
-
-	methodCall := results[1].Call([]reflect.Value{reflect.ValueOf(&execCtx), reflect.ValueOf(rawArgs)})
-	hasil := res.Register(methodCall[0].Interface().(Value))
-	if res.ShouldReturn() {
-		return res
-	}
-
-	if hasil != nil && hasil.Get_context() != nil {
-		n.Context = hasil.Get_context()
-	}
-	return res.Success(hasil)
-}
-
-func (n BuiltInFunction) ExecutePrint() ([]string, func(*Context, []Expr) Value) {
-	return []string{"...value"}, func(ctx *Context, rawArgs []Expr) Value {
-		res := &RTResult{}
-
-		vals := ctx.Symbol_Table.Get("value")
-		var elements []Value
-		if list, ok := vals.(List); ok {
-			elements = list.Elements
-		} else if arr, ok := vals.(Array); ok {
-			elements = arr.Elements
-		} else {
-			elements = []Value{vals}
-		}
-
-		for _, v := range elements {
-			fmt.Printf("%v\n", PrintValueInterpreter(v))
-		}
-
-		// fmt.Printf("%v\n", PrintValueInterpreter(ctx.Symbol_Table.Get("value")))
-		return res.Success(Null{})
+	return Function{
+		BaseFunction: BaseFunction{
+			ArgNames:         slices.Clone(n.ArgNames),
+			BodyNode:         n.BodyNode,
+			Name:             n.Name,
+			ShouldAutoReturn: n.ShouldAutoReturn,
+			Pos_Start:        n.Pos_Start,
+			Pos_End:          n.Pos_End,
+			Context:          n.Context,
+		},
 	}
 }
+func (n Function) IsTrue() bool                                              { return true }
+func (n Function) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
+	return n.SetPos(posStart, posEnd)
+}
+func (n Function) Set_context(ctx *Context) Value { return n.SetContext(ctx) }
+func (n Function) Get_context() *Context          { return n.GetContext() }
+func (n Function) Is_true() bool                  { return n.IsTrue() }
 
-func (n BuiltInFunction) ExecutePrintRet() ([]string, func(*Context, []Expr) Value) {
-	return []string{"value"}, func(ctx *Context, rawArgs []Expr) Value {
-		res := &RTResult{}
-		return res.Success(String{
-			Value: fmt.Sprintf("%v", PrintValueInterpreter(ctx.Symbol_Table.Get("value"))),
-		})
-	}
+// BuiltinHandler represents a function signature and implementation for built-ins.
+type BuiltinHandler struct {
+	Args    []string
+	Execute func(ctx *Context, rawArgs []Expr, posStart, posEnd *tools.Position) Value
 }
 
-func (n BuiltInFunction) ExecuteInput() ([]string, func(*Context, []Expr) Value) {
-	return []string{"...value"}, func(ctx *Context, rawArgs []Expr) Value {
-		res := &RTResult{}
+var builtinDispatchTable = map[string]BuiltinHandler{
+	"Print": {
+		Args: []string{"...value"},
+		Execute: func(ctx *Context, rawArgs []Expr, posStart, posEnd *tools.Position) Value {
+			res := &RTResult{}
+			vals := ctx.GetSymbolTable().Get("value")
+			var elements []Value
+			if list, ok := vals.(List); ok {
+				elements = list.Elements
+			} else if arr, ok := vals.(Array); ok {
+				elements = arr.Elements
+			} else {
+				elements = []Value{vals}
+			}
 
-		//Need to improve this 20/01/2024 [23:41]
-		// Gonna improve it 24/01/2024 [14:07]
-		// var s string
-		// fmt.Scan(&s)
-
-		// return res.Success(String{
-		// 	Value: s,
-		// })
-
-		for i := 0; i < len(ctx.Symbol_Table.Get("value").(List).Elements); i++ {
-			switch rawArgs := rawArgs[i].(type) {
-			case VarAccessNode:
-				var s string
-				fmt.Scan(&s)
-
-				varName := rawArgs.VarNameTok.Value
-				declaredTypeVal := ctx.Symbol_Table.Get("VariableType " + varName)
-				var declaredTypeStr string
-				if declaredTypeVal != nil {
-					if sVal, ok := declaredTypeVal.(String); ok {
-						declaredTypeStr = sVal.Value
-					}
+			for _, v := range elements {
+				fmt.Printf("%v\n", PrintValueInterpreter(v))
+			}
+			return res.Success(Null{})
+		},
+	},
+	"PrintRet": {
+		Args: []string{"value"},
+		Execute: func(ctx *Context, rawArgs []Expr, posStart, posEnd *tools.Position) Value {
+			res := &RTResult{}
+			return res.Success(String{
+				Value: fmt.Sprintf("%v", PrintValueInterpreter(ctx.GetSymbolTable().Get("value"))),
+			})
+		},
+	},
+	"Input": {
+		Args: []string{"...value"},
+		Execute: func(ctx *Context, rawArgs []Expr, posStart, posEnd *tools.Position) Value {
+			res := &RTResult{}
+			valList, ok := ctx.GetSymbolTable().Get("value").(List)
+			if !ok {
+				return res.Failure(RTError(safePos(posStart), safePos(posEnd), "Internal error: invalid input parameter", ctx))
+			}
+			for i := 0; i < len(valList.Elements); i++ {
+				if i >= len(rawArgs) {
+					break
 				}
+				switch rawArg := rawArgs[i].(type) {
+				case VarAccessNode:
+					var s string
+					fmt.Scan(&s)
 
-				if parseFloat, err := strconv.ParseFloat(s, 64); err == nil {
-					isReal := strings.Contains(s, ".")
-					if declaredTypeStr == "integer" {
-						if isReal || parseFloat != math.Floor(parseFloat) {
-							errNya := RTError(*n.Pos_Start, *n.Pos_End, fmt.Sprintf("Type mismatch: cannot assign real number to integer variable '%s'", varName), ctx)
-							return res.Failure(errNya)
+					varName := rawArg.VarNameTok.Value
+					declaredTypeVal := ctx.GetSymbolTable().Get("VariableType " + varName)
+					var declaredTypeStr string
+					if declaredTypeVal != nil {
+						if sVal, ok := declaredTypeVal.(String); ok {
+							declaredTypeStr = sVal.Value
 						}
 					}
-					ctx.Symbol_Table.Set(varName, Number{Value: parseFloat, IsReal: isReal, Context: ctx})
-					continue
-				}
 
-				if declaredTypeStr == "integer" {
-					errNya := RTError(*n.Pos_Start, *n.Pos_End, fmt.Sprintf("Type mismatch: cannot assign string to integer variable '%s'", varName), ctx)
-					return res.Failure(errNya)
-				}
+					if parseFloat, err := strconv.ParseFloat(s, 64); err == nil {
+						isReal := strings.Contains(s, ".")
+						if declaredTypeStr == "integer" {
+							if isReal || parseFloat != math.Floor(parseFloat) {
+								errNya := RTError(safePos(posStart), safePos(posEnd), fmt.Sprintf("Type mismatch: cannot assign real number to integer variable '%s'", varName), ctx)
+								return res.Failure(errNya)
+							}
+						}
+						ctx.GetSymbolTable().Set(varName, Number{Value: parseFloat, IsReal: isReal, Context: ctx})
+						continue
+					}
 
-				ctx.Symbol_Table.Set(varName, String{Value: s})
-			default:
-				return res.Failure(RTError(*n.Pos_Start, *n.Pos_End, "input() can only read into a variable, not an expression or literal", ctx))
+					if declaredTypeStr == "integer" {
+						errNya := RTError(safePos(posStart), safePos(posEnd), fmt.Sprintf("Type mismatch: cannot assign string to integer variable '%s'", varName), ctx)
+						return res.Failure(errNya)
+					}
+
+					ctx.GetSymbolTable().Set(varName, String{Value: s, Context: ctx})
+				default:
+					return res.Failure(RTError(safePos(posStart), safePos(posEnd), "input() can only read into a variable, not an expression or literal", ctx))
+				}
 			}
-		}
+			return res.Success(Null{Context: ctx})
+		},
+	},
+	"Panjang": {
+		Args: []string{"value"},
+		Execute: func(ctx *Context, rawArgs []Expr, posStart, posEnd *tools.Position) Value {
+			res := &RTResult{}
+			val := ctx.GetSymbolTable().Get("value")
+			if s, ok := val.(String); ok {
+				return res.Success(Number{Value: float64(len(s.Value)), IsReal: false, Context: ctx})
+			}
+			if arr, ok := val.(Array); ok {
+				return res.Success(Number{Value: float64(len(arr.Elements)), IsReal: false, Context: ctx})
+			}
+			if list, ok := val.(List); ok {
+				return res.Success(Number{Value: float64(len(list.Elements)), IsReal: false, Context: ctx})
+			}
 
-		return res.Success(Null{Context: ctx})
-	}
-}
+			errNya := RTError(safePos(posStart), safePos(posEnd), "Argument to panjang must be a string, array, or list", ctx)
+			return res.Failure(errNya)
+		},
+	},
+	"Bulat": {
+		Args: []string{"value"},
+		Execute: func(ctx *Context, rawArgs []Expr, posStart, posEnd *tools.Position) Value {
+			res := &RTResult{}
+			val := ctx.GetSymbolTable().Get("value")
+			if num, ok := val.(Number); ok {
+				rounded := math.Floor(num.Value + 0.5)
+				return res.Success(Number{Value: rounded, IsReal: false, Context: ctx})
+			}
+			errNya := RTError(safePos(posStart), safePos(posEnd), "Argument to Bulat must be a number", ctx)
+			return res.Failure(errNya)
+		},
+	},
+	"IsNumber": {
+		Args: []string{"value"},
+		Execute: func(ctx *Context, rawArgs []Expr, posStart, posEnd *tools.Position) Value {
+			res := &RTResult{}
+			if _, ok := ctx.GetSymbolTable().Get("value").(Number); ok {
+				return res.Success(Number{Value: 1, Context: ctx})
+			}
+			return res.Success(Number{Value: 0, Context: ctx})
+		},
+	},
+	"IsString": {
+		Args: []string{"value"},
+		Execute: func(ctx *Context, rawArgs []Expr, posStart, posEnd *tools.Position) Value {
+			res := &RTResult{}
+			if _, ok := ctx.GetSymbolTable().Get("value").(String); ok {
+				return res.Success(Number{Value: 1, Context: ctx})
+			}
+			return res.Success(Number{Value: 0, Context: ctx})
+		},
+	},
+	"Append": {
+		Args: []string{"list", "value"},
+		Execute: func(ctx *Context, rawArgs []Expr, posStart, posEnd *tools.Position) Value {
+			res := &RTResult{}
+			list, ok := ctx.GetSymbolTable().Get("list").(List)
+			value := ctx.GetSymbolTable().Get("value")
+			if !ok {
+				return res.Failure(RTError(safePos(posStart), safePos(posEnd), "First Argument must be list", ctx))
+			}
+			list.Elements = append(list.Elements, value)
+			ctx.GetSymbolTable().Set("list", list)
+			return res.Success(Number{Value: 0, Context: ctx})
+		},
+	},
+	"InputBaris": {
+		Args: []string{"...value"},
+		Execute: func(ctx *Context, rawArgs []Expr, posStart, posEnd *tools.Position) Value {
+			res := &RTResult{}
+			reader := getStdinReader()
+			valList, ok := ctx.GetSymbolTable().Get("value").(List)
+			if !ok {
+				return res.Failure(RTError(safePos(posStart), safePos(posEnd), "Internal error: invalid input parameter", ctx))
+			}
 
-func (n BuiltInFunction) ExecutePanjang() ([]string, func(*Context, []Expr) Value) {
-	return []string{"value"}, func(ctx *Context, rawArgs []Expr) Value {
-		res := &RTResult{}
-		val := ctx.Symbol_Table.Get("value")
-		if s, ok := val.(String); ok {
-			return res.Success(Number{Value: float64(len(s.Value)), IsReal: false, Context: ctx})
-		}
-		if arr, ok := val.(Array); ok {
-			return res.Success(Number{Value: float64(len(arr.Elements)), IsReal: false, Context: ctx})
-		}
-		if list, ok := val.(List); ok {
-			return res.Success(Number{Value: float64(len(list.Elements)), IsReal: false, Context: ctx})
-		}
+			for i := 0; i < len(valList.Elements); i++ {
+				if i >= len(rawArgs) {
+					break
+				}
+				switch rawArg := rawArgs[i].(type) {
+				case VarAccessNode:
+					line, err := reader.ReadString('\n')
+					if err != nil && err != io.EOF {
+						errNya := RTError(safePos(posStart), safePos(posEnd), fmt.Sprintf("Error reading input: %v", err), ctx)
+						return res.Failure(errNya)
+					}
+					line = strings.TrimRight(line, "\r\n")
 
-		errNya := RTError(*n.Pos_Start, *n.Pos_End, "Argument to panjang must be a string, array, or list", ctx)
-		return res.Failure(errNya)
-	}
-}
+					varName := rawArg.VarNameTok.Value
+					declaredTypeVal := ctx.GetSymbolTable().Get("VariableType " + varName)
+					var declaredTypeStr string
+					if declaredTypeVal != nil {
+						if sVal, ok := declaredTypeVal.(String); ok {
+							declaredTypeStr = sVal.Value
+						}
+					}
 
-func (n BuiltInFunction) ExecuteBulat() ([]string, func(*Context, []Expr) Value) {
-	return []string{"value"}, func(ctx *Context, rawArgs []Expr) Value {
-		res := &RTResult{}
-		val := ctx.Symbol_Table.Get("value")
-		if num, ok := val.(Number); ok {
-			rounded := math.Floor(num.Value + 0.5)
-			return res.Success(Number{Value: rounded, IsReal: false, Context: ctx})
-		}
+					if declaredTypeStr == "integer" {
+						if parseFloat, err := strconv.ParseFloat(line, 64); err == nil {
+							isReal := strings.Contains(line, ".")
+							if isReal || parseFloat != math.Floor(parseFloat) {
+								errNya := RTError(safePos(posStart), safePos(posEnd), fmt.Sprintf("Type mismatch: cannot assign real number to integer variable '%s'", varName), ctx)
+								return res.Failure(errNya)
+							}
+							ctx.GetSymbolTable().Set(varName, Number{Value: parseFloat, IsReal: isReal, Context: ctx})
+							continue
+						}
+						errNya := RTError(safePos(posStart), safePos(posEnd), fmt.Sprintf("Type mismatch: cannot assign string to integer variable '%s'", varName), ctx)
+						return res.Failure(errNya)
+					}
 
-		errNya := RTError(*n.Pos_Start, *n.Pos_End, "Argument to Bulat must be a number", ctx)
-		return res.Failure(errNya)
-	}
-}
-
-type Struct struct {
-	Fields    map[string]Value
-	Context   *Context
-	Pos_Start *tools.Position
-	Pos_End   *tools.Position
-}
-
-func (n Struct) Print() string {
-	return PrintValueInterpreter(n)
-}
-
-func (n Struct) Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Value {
-	n.Pos_Start = Pos_Start
-	n.Pos_End = Pos_End
-	return n
-}
-
-func (n Struct) Set_context(context *Context) Value {
-	n.Context = context
-	return n
-}
-
-func (n Struct) Get_context() *Context {
-	return n.Context
-}
-
-func (n Struct) Copy() Value {
-	return n
-}
-
-func (n Struct) Is_true() bool {
-	return true
-}
-
-type Type struct {
-	Definition Expr
-	Context    *Context
-	Pos_Start  *tools.Position
-	Pos_End    *tools.Position
-}
-
-func (n Type) Print() string {
-	return "<type>"
-}
-
-func (n Type) Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Value {
-	n.Pos_Start = Pos_Start
-	n.Pos_End = Pos_End
-	return n
-}
-
-func (n Type) Set_context(context *Context) Value {
-	n.Context = context
-	return n
-}
-
-func (n Type) Get_context() *Context {
-	return n.Context
-}
-
-func (n Type) Copy() Value {
-	return Type{
-		Definition: n.Definition,
-		Context:    n.Context,
-		Pos_Start:  n.Pos_Start,
-		Pos_End:    n.Pos_End,
-	}
-}
-
-func (n Type) Is_true() bool {
-	return true
-}
-
-func (n BuiltInFunction) ExecuteIsNumber() ([]string, func(*Context, []Expr) Value) {
-	return []string{"value"}, func(ctx *Context, rawArgs []Expr) Value {
-		res := &RTResult{}
-		_, apakahNumber := ctx.Symbol_Table.Get("value").(Number)
-		if apakahNumber {
-			return res.Success(Number{Value: 1})
-		}
-		return res.Success(Number{Value: 0})
-	}
-}
-
-func (n BuiltInFunction) ExecuteIsString() ([]string, func(*Context, []Expr) Value) {
-	return []string{"value"}, func(ctx *Context, rawArgs []Expr) Value {
-		res := &RTResult{}
-		_, apakahString := ctx.Symbol_Table.Get("value").(String)
-		if apakahString {
-			return res.Success(Number{Value: 1})
-		}
-		return res.Success(Number{Value: 0})
-	}
-}
-
-func (n BuiltInFunction) ExecuteAppend() ([]string, func(*Context, []Expr) Value) {
-	return []string{"list", "value"}, func(ctx *Context, rawArgs []Expr) Value {
-		res := &RTResult{}
-
-		list, apakahList := ctx.Symbol_Table.Get("list").(List)
-		value := ctx.Symbol_Table.Get("value")
-
-		if !apakahList {
-			return res.Failure(RTError(*n.Pos_Start, *n.Pos_End, "First Argument must be list", ctx))
-		}
-
-		list.Elements = append(list.Elements, value)
-		ctx.Symbol_Table.Set("list", list)
-		return res.Success(Number{Value: 0})
-	}
+					ctx.GetSymbolTable().Set(varName, String{Value: line, Context: ctx})
+				default:
+					return res.Failure(RTError(safePos(posStart), safePos(posEnd), "inputBaris() can only read into a variable, not an expression or literal", ctx))
+				}
+			}
+			return res.Success(Null{Context: ctx})
+		},
+	},
+	"KonversiKeString": {
+		Args: []string{"value"},
+		Execute: func(ctx *Context, rawArgs []Expr, posStart, posEnd *tools.Position) Value {
+			res := &RTResult{}
+			val := ctx.GetSymbolTable().Get("value")
+			return res.Success(String{
+				Value:   PrintValueInterpreter(val),
+				Context: ctx,
+			})
+		},
+	},
 }
 
 var (
@@ -1150,65 +1081,131 @@ func getStdinReader() *bufio.Reader {
 	return stdinReader
 }
 
-func (n BuiltInFunction) ExecuteInputBaris() ([]string, func(*Context, []Expr) Value) {
-	return []string{"...value"}, func(ctx *Context, rawArgs []Expr) Value {
-		res := &RTResult{}
-		reader := getStdinReader()
-
-		for i := 0; i < len(ctx.Symbol_Table.Get("value").(List).Elements); i++ {
-			switch rawArgs := rawArgs[i].(type) {
-			case VarAccessNode:
-				line, err := reader.ReadString('\n')
-				if err != nil && err != io.EOF {
-					errNya := RTError(*n.Pos_Start, *n.Pos_End, fmt.Sprintf("Error reading input: %v", err), ctx)
-					return res.Failure(errNya)
-				}
-				line = strings.TrimRight(line, "\r\n")
-
-				varName := rawArgs.VarNameTok.Value
-				declaredTypeVal := ctx.Symbol_Table.Get("VariableType " + varName)
-				var declaredTypeStr string
-				if declaredTypeVal != nil {
-					if sVal, ok := declaredTypeVal.(String); ok {
-						declaredTypeStr = sVal.Value
-					}
-				}
-
-				if declaredTypeStr == "integer" {
-					if parseFloat, err := strconv.ParseFloat(line, 64); err == nil {
-						isReal := strings.Contains(line, ".")
-						if isReal || parseFloat != math.Floor(parseFloat) {
-							errNya := RTError(*n.Pos_Start, *n.Pos_End, fmt.Sprintf("Type mismatch: cannot assign real number to integer variable '%s'", varName), ctx)
-							return res.Failure(errNya)
-						}
-						ctx.Symbol_Table.Set(varName, Number{Value: parseFloat, IsReal: isReal, Context: ctx})
-						continue
-					}
-					errNya := RTError(*n.Pos_Start, *n.Pos_End, fmt.Sprintf("Type mismatch: cannot assign string to integer variable '%s'", varName), ctx)
-					return res.Failure(errNya)
-				}
-
-				ctx.Symbol_Table.Set(varName, String{Value: line})
-			default:
-				return res.Failure(RTError(*n.Pos_Start, *n.Pos_End, "inputBaris() can only read into a variable, not an expression or literal", ctx))
-			}
-		}
-
-		return res.Success(Null{Context: ctx})
-	}
+// BuiltInFunction represents a built-in DAP function.
+type BuiltInFunction struct {
+	BaseFunction
 }
 
-func (n BuiltInFunction) ExecuteKonversiKeString() ([]string, func(*Context, []Expr) Value) {
-	return []string{"value"}, func(ctx *Context, rawArgs []Expr) Value {
-		res := &RTResult{}
-		val := ctx.Symbol_Table.Get("value")
-		return res.Success(String{
-			Value:   PrintValueInterpreter(val),
-			Context: ctx,
-		})
+func (n BuiltInFunction) Print() string { return fmt.Sprintf("<function %s>", n.Name) }
+func (n BuiltInFunction) SetPos(posStart *tools.Position, posEnd *tools.Position) Value {
+	n.Pos_Start = posStart
+	n.Pos_End = posEnd
+	return n
+}
+func (n BuiltInFunction) SetContext(ctx *Context) Value { n.Context = ctx; return n }
+func (n BuiltInFunction) GetContext() *Context          { return n.Context }
+func (n BuiltInFunction) Copy() Value {
+	return BuiltInFunction{
+		BaseFunction: BaseFunction{
+			Name:      n.Name,
+			Pos_Start: n.Pos_Start,
+			Pos_End:   n.Pos_End,
+			Context:   n.Context,
+		},
 	}
 }
+func (n BuiltInFunction) IsTrue() bool                                              { return true }
+func (n BuiltInFunction) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
+	return n.SetPos(posStart, posEnd)
+}
+func (n BuiltInFunction) Set_context(ctx *Context) Value { return n.SetContext(ctx) }
+func (n BuiltInFunction) Get_context() *Context          { return n.GetContext() }
+func (n BuiltInFunction) Is_true() bool                  { return n.IsTrue() }
 
+// Execute executes the built-in function without dynamic reflection.
+func (n BuiltInFunction) Execute(args []Value, rawArgs []Expr) Value {
+	res := &RTResult{}
+	handler, exists := builtinDispatchTable[n.Name]
+	if !exists {
+		return res.Failure(RTError(safePos(n.Pos_Start), safePos(n.Pos_End), fmt.Sprintf("Built-in function '%s' is not defined", n.Name), n.Context))
+	}
+
+	execCtx := n.GenerateNewContext()
+	res.Register(n.CheckAndPopulateArgs(handler.Args, args, &execCtx))
+	if res.ShouldReturn() {
+		return res
+	}
+
+	hasil := res.Register(handler.Execute(&execCtx, rawArgs, n.Pos_Start, n.Pos_End))
+	if res.ShouldReturn() {
+		return res
+	}
+
+	if hasil != nil && hasil.GetContext() != nil {
+		n.Context = hasil.GetContext()
+	}
+	return res.Success(hasil)
+}
+
+// Struct represents a structured record with named fields.
+type Struct struct {
+	Fields    map[string]Value
+	Context   *Context
+	Pos_Start *tools.Position
+	Pos_End   *tools.Position
+}
+
+func (n Struct) Print() string { return PrintValueInterpreter(n) }
+func (n Struct) SetPos(posStart *tools.Position, posEnd *tools.Position) Value {
+	n.Pos_Start = posStart
+	n.Pos_End = posEnd
+	return n
+}
+func (n Struct) SetContext(ctx *Context) Value { n.Context = ctx; return n }
+func (n Struct) GetContext() *Context          { return n.Context }
+func (n Struct) Copy() Value {
+	fieldsCopy := make(map[string]Value, len(n.Fields))
+	for k, v := range n.Fields {
+		fieldsCopy[k] = v.Copy()
+	}
+	return Struct{
+		Fields:    fieldsCopy,
+		Context:   n.Context,
+		Pos_Start: n.Pos_Start,
+		Pos_End:   n.Pos_End,
+	}
+}
+func (n Struct) IsTrue() bool                                              { return true }
+func (n Struct) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
+	return n.SetPos(posStart, posEnd)
+}
+func (n Struct) Set_context(ctx *Context) Value { return n.SetContext(ctx) }
+func (n Struct) Get_context() *Context          { return n.GetContext() }
+func (n Struct) Is_true() bool                  { return n.IsTrue() }
+
+// Type represents a user-defined type definition.
+type Type struct {
+	Definition Expr
+	Context    *Context
+	Pos_Start  *tools.Position
+	Pos_End    *tools.Position
+}
+
+func (n Type) Print() string { return "<type>" }
+func (n Type) SetPos(posStart *tools.Position, posEnd *tools.Position) Value {
+	n.Pos_Start = posStart
+	n.Pos_End = posEnd
+	return n
+}
+func (n Type) SetContext(ctx *Context) Value { n.Context = ctx; return n }
+func (n Type) GetContext() *Context          { return n.Context }
+func (n Type) Copy() Value {
+	return Type{
+		Definition: n.Definition,
+		Context:    n.Context,
+		Pos_Start:  n.Pos_Start,
+		Pos_End:    n.Pos_End,
+	}
+}
+func (n Type) IsTrue() bool                                              { return true }
+func (n Type) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
+	return n.SetPos(posStart, posEnd)
+}
+func (n Type) Set_context(ctx *Context) Value { return n.SetContext(ctx) }
+func (n Type) Get_context() *Context          { return n.GetContext() }
+func (n Type) Is_true() bool                  { return n.IsTrue() }
+
+// RTResult wraps the result of evaluating an AST node at runtime.
 type RTResult struct {
 	Value              Value
 	FuncReturnValue    Value
@@ -1229,70 +1226,84 @@ func (n *RTResult) Print() string {
 	fmt.Printf("%s\n", PrintValueInterpreter(n.Value))
 	return ""
 }
-func (n *RTResult) Set_pos(Pos_Start *tools.Position, Pos_End *tools.Position) Value {
-	return n
+func (n *RTResult) SetPos(posStart *tools.Position, posEnd *tools.Position) Value { return n }
+func (n *RTResult) SetContext(ctx *Context) Value                                 { return n }
+func (n *RTResult) GetContext() *Context                                          { return nil }
+func (n *RTResult) Copy() Value                                                   { return n }
+func (n *RTResult) IsTrue() bool                                                  { return false }
+func (n *RTResult) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
+	return n.SetPos(posStart, posEnd)
 }
-func (n *RTResult) Set_context(context *Context) Value {
-	return n
-}
-func (n RTResult) Get_context() *Context {
-	return nil
-}
-func (n *RTResult) Copy() Value {
-	return n
-}
+func (n *RTResult) Set_context(ctx *Context) Value { return n.SetContext(ctx) }
+func (n *RTResult) Get_context() *Context          { return n.GetContext() }
+func (n *RTResult) Is_true() bool                  { return n.IsTrue() }
 
+// Register registers results from a child evaluation step.
 func (rtResult *RTResult) Register(res Value) Value {
-	switch res := res.(type) {
-	case *RTResult:
-		if res.ShouldReturn() {
-			rtResult.Error = res.Error
+	if r, ok := res.(*RTResult); ok {
+		if r.ShouldReturn() {
+			rtResult.Error = r.Error
 		}
-
-		rtResult.FuncReturnValue = res.FuncReturnValue
-		rtResult.LoopShouldContinue = res.LoopShouldContinue
-		rtResult.LoopShouldBreak = res.LoopShouldBreak
-
-		return res.Value
+		rtResult.FuncReturnValue = r.FuncReturnValue
+		rtResult.LoopShouldContinue = r.LoopShouldContinue
+		rtResult.LoopShouldBreak = r.LoopShouldBreak
+		return r.Value
 	}
-
 	return res
 }
 
+// Success returns a successful result with a value.
 func (rtResult *RTResult) Success(value Value) Value {
 	rtResult.reset()
 	rtResult.Value = value
 	return rtResult
 }
 
-func (rtResult *RTResult) Success_Return(value Value) Value {
+// SuccessReturn returns a function return value.
+func (rtResult *RTResult) SuccessReturn(value Value) Value {
 	rtResult.reset()
 	rtResult.FuncReturnValue = value
 	return rtResult
 }
 
-func (rtResult *RTResult) Success_Continue() Value {
+// Success_Return is an alias for SuccessReturn.
+func (rtResult *RTResult) Success_Return(value Value) Value {
+	return rtResult.SuccessReturn(value)
+}
+
+// SuccessContinue sets the loop continue flag.
+func (rtResult *RTResult) SuccessContinue() Value {
 	rtResult.reset()
 	rtResult.LoopShouldContinue = true
 	return rtResult
 }
 
-func (rtResult *RTResult) Success_Break() Value {
+// Success_Continue is an alias for SuccessContinue.
+func (rtResult *RTResult) Success_Continue() Value {
+	return rtResult.SuccessContinue()
+}
+
+// SuccessBreak sets the loop break flag.
+func (rtResult *RTResult) SuccessBreak() Value {
 	rtResult.reset()
 	rtResult.LoopShouldBreak = true
 	return rtResult
 }
 
-func (rtResult *RTResult) Failure(error Error) Value {
+// Success_Break is an alias for SuccessBreak.
+func (rtResult *RTResult) Success_Break() Value {
+	return rtResult.SuccessBreak()
+}
+
+// Failure attaches a runtime error.
+func (rtResult *RTResult) Failure(err Error) Value {
 	rtResult.reset()
-	rtResult.Error = &error
+	errCopy := err
+	rtResult.Error = &errCopy
 	return rtResult
 }
 
+// ShouldReturn reports whether execution should unwind early.
 func (rtResult *RTResult) ShouldReturn() bool {
 	return rtResult.Error != nil || rtResult.FuncReturnValue != nil || rtResult.LoopShouldBreak || rtResult.LoopShouldContinue
-}
-
-func (n *RTResult) Is_true() bool {
-	return false
 }

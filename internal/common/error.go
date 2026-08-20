@@ -5,6 +5,7 @@ import (
 	"fmt"
 )
 
+// Error nyimpen detail error pas lexing, parsing, ataupun pas runtime DAP jalan.
 type Error struct {
 	PosStart  tools.Position
 	PosEnd    tools.Position
@@ -13,27 +14,33 @@ type Error struct {
 	Context   *Context
 }
 
-type ErrorInterface interface {
-	As_string() string
+// Error implement standard Go error interface biar bisa dipake kayak error Go biasa.
+func (e Error) Error() string {
+	return e.AsString()
 }
 
-func (error Error) As_string() string {
-	if error.ErrorName == "Runtime Error" {
-		hasil := error.generate_traceback()
-		hasil += fmt.Sprintf("%s: %s", error.ErrorName, error.Details)
-		return hasil
+// AsString buat nge-format pesan error biar rapi dan gampang dibaca.
+func (e Error) AsString() string {
+	if e.ErrorName == "Runtime Error" {
+		traceback := e.generateTraceback()
+		return fmt.Sprintf("%s%s: %s", traceback, e.ErrorName, e.Details)
 	}
 
-	return tools.FormatSyntaxError(error.PosStart, error.ErrorName, error.Details)
+	return tools.FormatSyntaxError(e.PosStart, e.ErrorName, e.Details)
 }
 
-func (error Error) generate_traceback() string {
-	hasil := ""
-	pos := error.PosStart
-	ctx := error.Context
+// As_string alias buat backward compatibility.
+func (e Error) As_string() string {
+	return e.AsString()
+}
+
+func (e Error) generateTraceback() string {
+	result := ""
+	pos := e.PosStart
+	ctx := e.Context
 
 	for ctx != nil {
-		hasil = fmt.Sprintf("File: %s, line %d, in %s\n%s", pos.Fn, pos.Ln+1, ctx.DisplayName, hasil)
+		result = fmt.Sprintf("File: %s, line %d, in %s\n%s", pos.Fn, pos.Ln+1, ctx.DisplayName, result)
 
 		if ctx.ParentEntryPos == nil || ctx.Parent == nil {
 			break
@@ -43,31 +50,34 @@ func (error Error) generate_traceback() string {
 		ctx = ctx.Parent
 	}
 
-	return hasil
+	return result
 }
 
-func IllegalCharError(PosStart tools.Position, PosEnd tools.Position) Error {
+// IllegalCharError helper buat bikin error karakter aneh/ilegal.
+func IllegalCharError(posStart tools.Position, posEnd tools.Position) Error {
 	return Error{
-		PosStart:  PosStart,
-		PosEnd:    PosEnd,
+		PosStart:  posStart,
+		PosEnd:    posEnd,
 		ErrorName: "Illegal Character Error",
 		Details:   "",
 	}
 }
 
-func InvalidSyntax(PosStart tools.Position, PosEnd tools.Position, details string) Error {
+// InvalidSyntax helper buat bikin syntax error pas parsing.
+func InvalidSyntax(posStart tools.Position, posEnd tools.Position, details string) Error {
 	return Error{
-		PosStart:  PosStart,
-		PosEnd:    PosEnd,
+		PosStart:  posStart,
+		PosEnd:    posEnd,
 		ErrorName: "Invalid Syntax",
 		Details:   details,
 	}
 }
 
-func RTError(PosStart tools.Position, PosEnd tools.Position, details string, context *Context) Error {
+// RTError helper buat bikin runtime error pas program lagi dieksekusi.
+func RTError(posStart tools.Position, posEnd tools.Position, details string, context *Context) Error {
 	return Error{
-		PosStart:  PosStart,
-		PosEnd:    PosEnd,
+		PosStart:  posStart,
+		PosEnd:    posEnd,
 		ErrorName: "Runtime Error",
 		Details:   details,
 		Context:   context,

@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// Position nyimpen posisi kursor/karakter di file source code (index, baris, kolom, nama file).
 type Position struct {
 	Idx  int
 	Ln   int
@@ -13,70 +14,102 @@ type Position struct {
 	Ftxt string
 }
 
-func (position *Position) AdvanceN(berapa int) {
-	position.Idx += berapa
-	position.Col += berapa
+// AdvanceN buat majuin posisi kursor sebanyak n karakter.
+func (p *Position) AdvanceN(n int) {
+	p.Idx += n
+	p.Col += n
 }
 
-func (position *Position) Advance(CurrentChar string) *Position {
-	position.Idx++
-	position.Col++
+// Advance buat majuin posisi kursor 1 karakter, otomatis nge-handle baris baru kalo nemu newline.
+func (p *Position) Advance(currentChar string) *Position {
+	p.Idx++
+	p.Col++
 
-	if CurrentChar == "\n" {
-		position.Ln++
-		position.Col = 0
+	if currentChar == "\n" {
+		p.Ln++
+		p.Col = 0
 	}
 
-	return position
+	return p
 }
 
-func (position *Position) Copy() *Position {
+// Copy buat bikin kloningan Position yang terpisah.
+func (p *Position) Copy() *Position {
+	if p == nil {
+		return nil
+	}
 	return &Position{
-		Idx:  position.Idx,
-		Ln:   position.Ln,
-		Col:  position.Col,
-		Fn:   position.Fn,
-		Ftxt: position.Ftxt,
+		Idx:  p.Idx,
+		Ln:   p.Ln,
+		Col:  p.Col,
+		Fn:   p.Fn,
+		Ftxt: p.Ftxt,
 	}
 }
 
-func GetComparison(hasil bool) int {
-	if hasil {
-		return 1
-	}
-
-	return 0
-}
-
-var SemuaBuiltInFunction map[string]string = map[string]string{
-	"print":  "Print",
-	"PRINT":  "Print",
-	"write":  "Print",
-	"WRITE":  "Print",
-	"output": "Print",
-	"OUTPUT": "Print",
-	"read":   "Input",
-	"READ":   "Input",
-	"input":  "Input",
-	"INPUT":  "Input",
-	"panjang": "Panjang",
-	"PANJANG": "Panjang",
-	"Panjang": "Panjang",
-	"bulat":   "Bulat",
-	"BULAT":   "Bulat",
-	"Bulat":   "Bulat",
+// BuiltinFunctions nyimpen mapping keyword function bawaan DAP ke nama function eksekutornya.
+var BuiltinFunctions = map[string]string{
+	"print":            "Print",
+	"PRINT":            "Print",
+	"write":            "Print",
+	"WRITE":            "Print",
+	"output":           "Print",
+	"OUTPUT":           "Print",
+	"read":             "Input",
+	"READ":             "Input",
+	"input":            "Input",
+	"INPUT":            "Input",
+	"panjang":          "Panjang",
+	"PANJANG":          "Panjang",
+	"Panjang":          "Panjang",
+	"length":           "Panjang",
+	"LENGTH":           "Panjang",
+	"len":              "Panjang",
+	"bulat":            "Bulat",
+	"BULAT":            "Bulat",
+	"Bulat":            "Bulat",
+	"round":            "Bulat",
+	"ROUND":            "Bulat",
+	"isNumber":         "IsNumber",
+	"is_number":        "IsNumber",
+	"ISNUMBER":         "IsNumber",
+	"isString":         "IsString",
+	"is_string":        "IsString",
+	"ISSTRING":         "IsString",
+	"append":           "Append",
+	"APPEND":           "Append",
+	"tulis":            "Print",
+	"TULIS":            "Print",
+	"masukan":          "Input",
+	"MASUKAN":          "Input",
+	"outputRet":        "PrintRet",
+	"output_ret":       "PrintRet",
+	"printRet":         "PrintRet",
+	"print_ret":        "PrintRet",
 	"inputBaris":       "InputBaris",
+	"input_baris":      "InputBaris",
 	"INPUTBARIS":       "InputBaris",
 	"inputbaris":       "InputBaris",
 	"konversiKeString": "KonversiKeString",
+	"konversi_ke_string": "KonversiKeString",
 	"KONVERSIKESTRING": "KonversiKeString",
 	"konversikestring": "KonversiKeString",
 }
 
-func ApakahBuiltinFunction(s string) bool {
-	return SemuaBuiltInFunction[s] != ""
+// SemuaBuiltInFunction alias buat backward compatibility.
+var SemuaBuiltInFunction = BuiltinFunctions
+
+// IsBuiltinFunction ngecek apakah nama function ini terdaftar sebagai function bawaan DAP.
+func IsBuiltinFunction(s string) bool {
+	return BuiltinFunctions[s] != ""
 }
 
+// ApakahBuiltinFunction alias buat backward compatibility.
+func ApakahBuiltinFunction(s string) bool {
+	return IsBuiltinFunction(s)
+}
+
+// FormatSyntaxError buat nge-format syntax error jadi pesan traceback yang rapi plus penunjuk panah (^).
 func FormatSyntaxError(pos Position, errorName string, details string) string {
 	lines := strings.Split(strings.ReplaceAll(pos.Ftxt, "\r\n", "\n"), "\n")
 	lineText := ""
@@ -100,7 +133,6 @@ func FormatSyntaxError(pos Position, errorName string, details string) string {
 		caretSpacing.WriteString(strings.Repeat(" ", padding))
 	}
 
-	// 3. Map DAP error names to Python-like equivalents and simplify verbose syntax error details
 	errName := errorName
 	switch errName {
 	case "Invalid Syntax":
@@ -122,14 +154,15 @@ func FormatSyntaxError(pos Position, errorName string, details string) string {
 		details = "invalid syntax"
 	}
 
-	msg := "Traceback (most recent call last):\n"
-	msg += fmt.Sprintf("  File \"%s\", line %d\n", pos.Fn, pos.Ln+1)
-	msg += fmt.Sprintf("    %s\n", lineText)
-	msg += fmt.Sprintf("    %s^\n", caretSpacing.String())
+	var msg strings.Builder
+	msg.WriteString("Traceback (most recent call last):\n")
+	msg.WriteString(fmt.Sprintf("  File \"%s\", line %d\n", pos.Fn, pos.Ln+1))
+	msg.WriteString(fmt.Sprintf("    %s\n", lineText))
+	msg.WriteString(fmt.Sprintf("    %s^\n", caretSpacing.String()))
 	if details != "" {
-		msg += fmt.Sprintf("%s: %s", errName, details)
+		msg.WriteString(fmt.Sprintf("%s: %s", errName, details))
 	} else {
-		msg += fmt.Sprintf("%s", errName)
+		msg.WriteString(errName)
 	}
-	return msg
+	return msg.String()
 }
