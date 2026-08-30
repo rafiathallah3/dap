@@ -37,11 +37,16 @@ var defaultPatterns = []regexPattern{
 	{regexp.MustCompile(`=`), defaultHandler(ASSIGNMENT, "=")},
 	{regexp.MustCompile(`!`), defaultHandler(NOT, "!")},
 	{regexp.MustCompile(`<=`), defaultHandler(LESS_EQUALS, "<=")},
+	{regexp.MustCompile(`<<`), defaultHandler(SHIFT_LEFT, "<<")},
 	{regexp.MustCompile(`<`), defaultHandler(LESS, "<")},
 	{regexp.MustCompile(`>=`), defaultHandler(GREATER_EQUALS, ">=")},
+	{regexp.MustCompile(`>>`), defaultHandler(SHIFT_RIGHT, ">>")},
 	{regexp.MustCompile(`>`), defaultHandler(GREATER, ">")},
 	{regexp.MustCompile(`\|\|`), defaultHandler(OR, "||")},
+	{regexp.MustCompile(`\|`), defaultHandler(BIT_OR, "|")},
 	{regexp.MustCompile(`&&`), defaultHandler(AND, "&&")},
+	{regexp.MustCompile(`&`), defaultHandler(BIT_AND, "&")},
+	{regexp.MustCompile(`~`), defaultHandler(BIT_NOT, "~")},
 	{regexp.MustCompile(`\.\.`), defaultHandler(DOT_DOT, "..")},
 	{regexp.MustCompile(`\.`), defaultHandler(DOT, ".")},
 	{regexp.MustCompile(`:`), defaultHandler(COLON, ":")},
@@ -52,9 +57,10 @@ var defaultPatterns = []regexPattern{
 	{regexp.MustCompile(`\+`), defaultHandler(PLUS, "+")},
 	{regexp.MustCompile(`-`), defaultHandler(DASH, "-")},
 	{regexp.MustCompile(`/`), defaultHandler(SLASH, "/")},
+	{regexp.MustCompile(`\*\*`), defaultHandler(DOUBLE_STAR, "**")},
 	{regexp.MustCompile(`\*`), defaultHandler(STAR, "*")},
 	{regexp.MustCompile(`%`), defaultHandler(PERCENT, "%")},
-	{regexp.MustCompile(`\^`), defaultHandler(POWER, "^")},
+	{regexp.MustCompile(`\^`), defaultHandler(BIT_XOR, "^")},
 }
 
 type lexer struct {

@@ -56,6 +56,14 @@ const (
 	PERCENT
 	POWER
 	DIV
+	DOUBLE_STAR
+
+	BIT_AND
+	BIT_OR
+	BIT_XOR
+	BIT_NOT
+	SHIFT_LEFT
+	SHIFT_RIGHT
 
 	PROGRAM
 	DICTIONARY
@@ -302,6 +310,20 @@ func TokenKindString(kind TokenKind) string {
 		return "PERCENT"
 	case POWER:
 		return "POWER"
+	case DOUBLE_STAR:
+		return "DOUBLE_STAR"
+	case BIT_AND:
+		return "BIT_AND"
+	case BIT_OR:
+		return "BIT_OR"
+	case BIT_XOR:
+		return "BIT_XOR"
+	case BIT_NOT:
+		return "BIT_NOT"
+	case SHIFT_LEFT:
+		return "SHIFT_LEFT"
+	case SHIFT_RIGHT:
+		return "SHIFT_RIGHT"
 	case DIV:
 		return "DIV"
 	case VAR:

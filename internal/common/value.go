@@ -584,6 +584,86 @@ func (n Number) Power(other Value) (Value, *Error) {
 	return nil, &err
 }
 
+func (n Number) BitwiseAnd(other Value) (Value, *Error) {
+	switch other := other.(type) {
+	case Number:
+		if n.IsReal || other.IsReal {
+			err := RTError(safePos(n.Pos_Start), safePos(other.Pos_End), "Illegal operation: bitwise '&' requires integer operands", n.Context)
+			return nil, &err
+		}
+		return Number{Value: float64(int64(n.Value) & int64(other.Value)), IsReal: false, Context: n.Context}, nil
+	}
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform bitwise AND with the given type", n.Context)
+	return nil, &err
+}
+
+func (n Number) BitwiseOr(other Value) (Value, *Error) {
+	switch other := other.(type) {
+	case Number:
+		if n.IsReal || other.IsReal {
+			err := RTError(safePos(n.Pos_Start), safePos(other.Pos_End), "Illegal operation: bitwise '|' requires integer operands", n.Context)
+			return nil, &err
+		}
+		return Number{Value: float64(int64(n.Value) | int64(other.Value)), IsReal: false, Context: n.Context}, nil
+	}
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform bitwise OR with the given type", n.Context)
+	return nil, &err
+}
+
+func (n Number) BitwiseXor(other Value) (Value, *Error) {
+	switch other := other.(type) {
+	case Number:
+		if n.IsReal || other.IsReal {
+			return Number{Value: math.Pow(n.Value, other.Value), IsReal: true, Context: n.Context}, nil
+		}
+		return Number{Value: float64(int64(n.Value) ^ int64(other.Value)), IsReal: false, Context: n.Context}, nil
+	}
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform bitwise XOR with the given type", n.Context)
+	return nil, &err
+}
+
+func (n Number) BitwiseNot() (Value, *Error) {
+	if n.IsReal {
+		err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: bitwise '~' requires integer operand", n.Context)
+		return nil, &err
+	}
+	return Number{Value: float64(^int64(n.Value)), IsReal: false, Context: n.Context}, nil
+}
+
+func (n Number) ShiftLeft(other Value) (Value, *Error) {
+	switch other := other.(type) {
+	case Number:
+		if n.IsReal || other.IsReal {
+			err := RTError(safePos(n.Pos_Start), safePos(other.Pos_End), "Illegal operation: bitwise '<<' requires integer operands", n.Context)
+			return nil, &err
+		}
+		if other.Value < 0 {
+			err := RTError(safePos(other.Pos_Start), safePos(other.Pos_End), "Illegal operation: negative shift count", n.Context)
+			return nil, &err
+		}
+		return Number{Value: float64(int64(n.Value) << uint64(other.Value)), IsReal: false, Context: n.Context}, nil
+	}
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform bitwise shift left with the given type", n.Context)
+	return nil, &err
+}
+
+func (n Number) ShiftRight(other Value) (Value, *Error) {
+	switch other := other.(type) {
+	case Number:
+		if n.IsReal || other.IsReal {
+			err := RTError(safePos(n.Pos_Start), safePos(other.Pos_End), "Illegal operation: bitwise '>>' requires integer operands", n.Context)
+			return nil, &err
+		}
+		if other.Value < 0 {
+			err := RTError(safePos(other.Pos_Start), safePos(other.Pos_End), "Illegal operation: negative shift count", n.Context)
+			return nil, &err
+		}
+		return Number{Value: float64(int64(n.Value) >> uint64(other.Value)), IsReal: false, Context: n.Context}, nil
+	}
+	err := RTError(safePos(n.Pos_Start), safePos(n.Pos_End), "Illegal operation: cannot perform bitwise shift right with the given type", n.Context)
+	return nil, &err
+}
+
 func (n Number) Equal(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:

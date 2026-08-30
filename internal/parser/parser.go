@@ -1288,10 +1288,6 @@ func (p *parser) atom() common.Expr {
 	return res.Failure(&errorNya)
 }
 
-func (p *parser) power() common.Expr {
-	return p.binOp(p.call, []lexer.TokenKind{lexer.POWER}, p.factor)
-}
-
 func (p *parser) call() common.Expr {
 	res := &common.ParseResult{}
 	atom := res.Register(p.atom())
@@ -1403,11 +1399,15 @@ func (p *parser) call() common.Expr {
 	return res.Success(atom)
 }
 
+func (p *parser) power() common.Expr {
+	return p.binOp(p.call, []lexer.TokenKind{lexer.POWER, lexer.DOUBLE_STAR}, p.factor)
+}
+
 func (p *parser) factor() common.Expr {
 	res := &common.ParseResult{}
 	tok := p.currentToken()
 
-	if tok.Kind == lexer.PLUS || tok.Kind == lexer.DASH {
+	if tok.Kind == lexer.PLUS || tok.Kind == lexer.DASH || tok.Kind == lexer.BIT_NOT {
 		res.RegisterAdvancement()
 		p.advance()
 		factor := res.Register(p.factor())
@@ -1435,6 +1435,22 @@ func (p *parser) arithExpr() common.Expr {
 	return p.binOp(p.term, []lexer.TokenKind{lexer.PLUS, lexer.DASH}, p.term)
 }
 
+func (p *parser) shiftExpr() common.Expr {
+	return p.binOp(p.arithExpr, []lexer.TokenKind{lexer.SHIFT_LEFT, lexer.SHIFT_RIGHT}, p.arithExpr)
+}
+
+func (p *parser) bitAndExpr() common.Expr {
+	return p.binOp(p.shiftExpr, []lexer.TokenKind{lexer.BIT_AND}, p.shiftExpr)
+}
+
+func (p *parser) bitXorExpr() common.Expr {
+	return p.binOp(p.bitAndExpr, []lexer.TokenKind{lexer.BIT_XOR}, p.bitAndExpr)
+}
+
+func (p *parser) bitOrExpr() common.Expr {
+	return p.binOp(p.bitXorExpr, []lexer.TokenKind{lexer.BIT_OR}, p.bitXorExpr)
+}
+
 func (p *parser) compExpr() common.Expr {
 	res := &common.ParseResult{}
 
@@ -1457,9 +1473,9 @@ func (p *parser) compExpr() common.Expr {
 		})
 	}
 
-	node := res.Register(p.binOp(p.arithExpr, []lexer.TokenKind{lexer.EQUALS, lexer.NOT_EQUALS, lexer.LESS, lexer.LESS_EQUALS, lexer.GREATER, lexer.GREATER_EQUALS}, p.arithExpr))
+	node := res.Register(p.binOp(p.bitOrExpr, []lexer.TokenKind{lexer.EQUALS, lexer.NOT_EQUALS, lexer.LESS, lexer.LESS_EQUALS, lexer.GREATER, lexer.GREATER_EQUALS}, p.bitOrExpr))
 	if res.Error != nil {
-		errorNya := common.InvalidSyntax(safePos(p.currentToken().PosStart), safePos(p.currentToken().PosEnd), "Expected a number, an identifier, 'not', '+', '-', '(' or '['")
+		errorNya := common.InvalidSyntax(safePos(p.currentToken().PosStart), safePos(p.currentToken().PosEnd), "Expected a number, an identifier, 'not', '+', '-', '~', '(' or '['")
 		return res.Failure(&errorNya)
 	}
 

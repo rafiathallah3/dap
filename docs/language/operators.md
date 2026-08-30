@@ -27,11 +27,26 @@ DAP provides a complete suite of arithmetic, comparison, assignment, and logical
 | `/` | Real Division | Performs floating-point division | `7 / 2` | `3.5` |
 | `div` / `DIV` | Integer Division | Truncates decimal part | `7 div 2` | `3` |
 | `%` | Modulo | Remainder of division | `7 % 3` | `1` |
-| `^` | Exponentiation | Raises to power | `2 ^ 3` | `8` |
+| `^` / `**` | Exponentiation | Raises to power | `2 ** 3` or `2 ^ 3` | `8` |
 
 ---
 
-## 3. Comparison Operators
+## 3. Bitwise Operators
+
+DAP provides full support for low-level bitwise operations on integer operands:
+
+| Operator | Name | Behavior | Example | Result |
+| :--- | :--- | :--- | :--- | :--- |
+| `&` | Bitwise AND | Sets each bit to 1 if both bits are 1 | `12 & 10` (1100 & 1010) | `8` (1000) |
+| `\|` | Bitwise OR | Sets each bit to 1 if either bit is 1 | `12 \| 10` (1100 \| 1010) | `14` (1110) |
+| `^` | Bitwise XOR | Sets each bit to 1 if only one bit is 1 | `12 ^ 10` (1100 ^ 1010) | `6` (0110) |
+| `~` | Bitwise NOT | Inverts all the bits (unary) | `~5` | `-6` |
+| `<<` | Shift Left | Shifts bits to the left, zero-filled | `3 << 4` | `48` |
+| `>>` | Shift Right | Shifts bits to the right | `64 >> 3` | `8` |
+
+---
+
+## 4. Comparison Operators
 
 Comparison operators evaluate expressions and return boolean values (`true` or `false`):
 
@@ -46,30 +61,34 @@ Comparison operators evaluate expressions and return boolean values (`true` or `
 
 ---
 
-## 4. Logical Operators
+## 5. Logical Operators
 
 Logical operators combine boolean expressions:
 
 | Operator | Name | Description | Example |
 | :--- | :--- | :--- | :--- |
-| `&&` | Logical AND | Returns `true` only if both operands are true | `(x > 0) && (x < 100)` |
-| `\|\|` | Logical OR | Returns `true` if at least one operand is true | `(a == 0) \|\| (b == 0)` |
-| `!` | Logical NOT | Inverts the boolean truth value | `!(x == 10)` |
+| `and` / `&&` | Logical AND | Returns `true` only if both operands are true | `(x > 0) and (x < 100)` |
+| `or` / `\|\|` | Logical OR | Returns `true` if at least one operand is true | `(a == 0) or (b == 0)` |
+| `not` / `!` | Logical NOT | Inverts the boolean truth value | `not (x == 10)` |
 
 ---
 
-## 5. Operator Precedence
+## 6. Operator Precedence
 
 From highest precedence to lowest:
 
 1. Parentheses: `( ... )`
 2. Member / Array access: `.`, `[ ]`
-3. Exponentiation: `^`
-4. Unary: `-`, `!`
+3. Exponentiation: `**`, `^`
+4. Unary operators: `-`, `!`, `not`, `~` (Bitwise NOT)
 5. Multiplicative: `*`, `/`, `div`, `%`
 6. Additive: `+`, `-`
-7. Relational: `<`, `<=`, `>`, `>=`
-8. Equality: `==`, `!=`
-9. Logical AND: `&&`
-10. Logical OR: `||`
-11. Assignment: `<-`, `=`
+7. Bitwise Shifts: `<<`, `>>`
+8. Bitwise AND: `&`
+9. Bitwise XOR: `^`
+10. Bitwise OR: `|`
+11. Relational: `<`, `<=`, `>`, `>=`
+12. Equality: `==`, `!=`
+13. Logical AND: `and`, `&&`
+14. Logical OR: `or`, `||`
+15. Assignment: `<-`, `=`

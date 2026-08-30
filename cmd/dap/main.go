@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"dap/internal/bytecode"
 	"dap/internal/common"
 	"dap/internal/interpreter"
 	"dap/internal/lexer"
@@ -17,9 +18,13 @@ var (
 	// Version nyimpen versi aplikasi DAP sekarang.
 	Version = "v1.0.0"
 
-	showToken   = false
-	showAST     = false
-	showASTJSON = false
+	showToken        = false
+	showAST          = false
+	showASTJSON      = false
+	showBytecode     = false
+	compileMode      = false
+	vmMode           = false
+	outputFile       = ""
 
 	globalSymbolTable = &common.SymbolTable{
 		Symbols: make(map[string]common.Value),
@@ -63,6 +68,42 @@ func RunProgram(source string, fileName string, isSingleLine bool) {
 	} else if showASTJSON {
 		common.PrintJSONAST(ast.Node)
 		return
+	}
+
+	// Bytecode Compilation
+	if compileMode || vmMode || showBytecode {
+		chunk, err := bytecode.Compile(ast.Node)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Bytecode Compilation Error: %v\n", err)
+			return
+		}
+
+		if showBytecode || compileMode {
+			disassembly := bytecode.Disassemble(chunk)
+			if outputFile != "" {
+				if err := os.WriteFile(outputFile, []byte(disassembly), 0644); err != nil {
+					fmt.Fprintf(os.Stderr, "Error writing to %s: %v\n", outputFile, err)
+					return
+				}
+				fmt.Printf("Compiled bytecode saved to '%s'\n", outputFile)
+			} else {
+				fmt.Print(disassembly)
+			}
+			if compileMode {
+				return
+			}
+		}
+
+		if vmMode {
+			if showAST || showASTJSON || showToken || showBytecode {
+				fmt.Println("########   VM RESULT   #########")
+			}
+			vm := bytecode.NewVM()
+			if err := vm.Run(chunk); err != nil {
+				fmt.Fprintf(os.Stderr, "VM Runtime Error: %v\n", err)
+			}
+			return
+		}
 	}
 
 	inter := interpreter.Interpreter{}
@@ -122,6 +163,20 @@ func main() {
 			showAST = true
 		case "--show-ast-json":
 			showASTJSON = true
+		case "--show-bytecode":
+			showBytecode = true
+		case "--compile", "-c", "-compile":
+			compileMode = true
+		case "--vm", "-b", "-vm":
+			vmMode = true
+		case "-o":
+			if i+1 < len(os.Args) {
+				i++
+				outputFile = os.Args[i]
+			} else {
+				fmt.Fprintln(os.Stderr, "Error: -o option requires an output file path.")
+				os.Exit(1)
+			}
 		case "--version", "-v":
 			updater.CheckVersion(Version)
 			os.Exit(0)
@@ -134,16 +189,22 @@ func main() {
 		case "--help", "-h":
 			fmt.Println("DAP, A friendly Pseudocode for you to learn basic logic")
 			fmt.Println("Usage:")
-			fmt.Println("  dap [file.dap]       Run a DAP program file")
-			fmt.Println("  dap                  Enter interactive console mode")
+			fmt.Println("  dap [file.dap]               Run a DAP program file (Tree-Walking Interpreter)")
+			fmt.Println("  dap --compile [file.dap]     Compile AST to bytecode disassembly")
+			fmt.Println("  dap --vm [file.dap]          Run a DAP program file on the Bytecode VM")
+			fmt.Println("  dap                          Enter interactive console mode")
 			fmt.Println("")
 			fmt.Println("Options:")
-			fmt.Println("  --version, -v        Show version and check for updates")
-			fmt.Println("  --update, -u         Update DAP to the latest release")
-			fmt.Println("  --show-token         Show tokens during execution")
-			fmt.Println("  --show-ast           Show abstract syntax tree during execution")
-			fmt.Println("  --show-ast-json      Show abstract syntax tree in JSON format")
-			fmt.Println("  --help, -h           Show this help message")
+			fmt.Println("  --version, -v                Show version and check for updates")
+			fmt.Println("  --update, -u                 Update DAP to the latest release")
+			fmt.Println("  --compile, -c                Compile AST into lightweight bytecode")
+			fmt.Println("  --vm, -b                     Execute compiled bytecode via Bytecode VM")
+			fmt.Println("  -o <path>                    Output file path for compiled bytecode")
+			fmt.Println("  --show-bytecode              Show disassembled bytecode during execution")
+			fmt.Println("  --show-token                 Show tokens during execution")
+			fmt.Println("  --show-ast                   Show abstract syntax tree during execution")
+			fmt.Println("  --show-ast-json              Show abstract syntax tree in JSON format")
+			fmt.Println("  --help, -h                   Show this help message")
 			os.Exit(0)
 		default:
 			if strings.HasPrefix(arg, "-") {

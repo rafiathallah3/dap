@@ -265,8 +265,18 @@ func (i *Interpreter) VisitBinOpNode(node common.Expr, context *common.Context) 
 			hasil, err = l.Div(right)
 		case lexer.PERCENT:
 			hasil, err = l.Mod(right)
-		case lexer.POWER:
+		case lexer.POWER, lexer.DOUBLE_STAR:
 			hasil, err = l.Power(right)
+		case lexer.BIT_AND:
+			hasil, err = l.BitwiseAnd(right)
+		case lexer.BIT_OR:
+			hasil, err = l.BitwiseOr(right)
+		case lexer.BIT_XOR:
+			hasil, err = l.BitwiseXor(right)
+		case lexer.SHIFT_LEFT:
+			hasil, err = l.ShiftLeft(right)
+		case lexer.SHIFT_RIGHT:
+			hasil, err = l.ShiftRight(right)
 		case lexer.EQUALS:
 			hasil, err = l.Equal(right)
 		case lexer.NOT_EQUALS:
@@ -346,6 +356,13 @@ func (i *Interpreter) VisitUnaryOpNode(node common.Expr, context *common.Context
 	var resultVal common.Value
 
 	switch nodeUnary.Operator.Kind {
+	case lexer.BIT_NOT:
+		if num, isNum := val.(common.Number); isNum {
+			resultVal, err = num.BitwiseNot()
+		} else {
+			errNya := common.RTError(safePos(nodeUnary.Operator.PosStart), safePos(nodeUnary.Operator.PosEnd), "Illegal operation: bitwise '~' expects an integer", context)
+			return res.Failure(errNya)
+		}
 	case lexer.DASH:
 		if num, isNum := val.(common.Number); isNum {
 			angka := common.Number{

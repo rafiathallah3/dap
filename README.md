@@ -75,7 +75,11 @@ Extract the archive and run `install.ps1` (Windows) or `./install.sh` (Linux/mac
 - Enter Console Mode: `dap`
 - Check Version: `dap --version` (or `dap -v`)
 - Update to Latest Release: `dap --update` (or `dap -u`)
-- Run a File: `dap program.dap`
+- Run a File (Tree-Walking Interpreter): `dap program.dap`
+- Compile AST to Lightweight Bytecode: `dap --compile program.dap` (or `dap -c program.dap`)
+- Run on Bytecode Virtual Machine: `dap --vm program.dap` (or `dap -b program.dap`)
+- Save Compiled Bytecode: `dap --compile -o output.dapb program.dap`
+- Show Bytecode Disassembly: `dap program.dap --show-bytecode`
 - Show Tokens: `dap program.dap --show-token`
 - Show AST: `dap program.dap --show-ast`
 - Show AST (JSON): `dap program.dap --show-ast-json`
