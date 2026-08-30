@@ -11,7 +11,7 @@ if (!(Test-Path $installDir)) {
 }
 
 $hasGo = $false
-if (Test-Path "utama.go") {
+if (Test-Path "cmd\dap\main.go") {
     try {
         $null = Get-Command "go" -ErrorAction Stop
         $hasGo = $true
@@ -22,7 +22,7 @@ if (Test-Path "utama.go") {
 
 if ($hasGo) {
     Write-Host "Building DAP from source..." -ForegroundColor Cyan
-    go build -o "$installDir\dap.exe" .
+    go build -o "$installDir\dap.exe" ./cmd/dap
     Write-Host "DAP built successfully!" -ForegroundColor Green
 } else {
     Write-Host "Downloading pre-built DAP binary..." -ForegroundColor Cyan

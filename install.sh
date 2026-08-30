@@ -11,9 +11,9 @@ BINARY_NAME="dap"
 mkdir -p "$INSTALL_DIR"
 
 # Check if Go is installed and we are in the source directory
-if command -v go >/dev/null 2>&1 && [ -f "utama.go" ]; then
+if command -v go >/dev/null 2>&1 && [ -f "cmd/dap/main.go" ]; then
     echo "Building DAP from source..."
-    go build -o "$INSTALL_DIR/$BINARY_NAME" .
+    go build -o "$INSTALL_DIR/$BINARY_NAME" ./cmd/dap
 else
     echo "Downloading DAP pre-built binary..."
     

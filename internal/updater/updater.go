@@ -69,6 +69,37 @@ func FetchLatestRelease() (*GitHubRelease, error) {
 	return &release, nil
 }
 
+// isNewerVersion returns true if remote version is strictly newer than current version.
+func isNewerVersion(remote, current string) bool {
+	remote = strings.TrimPrefix(remote, "v")
+	current = strings.TrimPrefix(current, "v")
+	if current == "dev" {
+		return false
+	}
+	rParts := strings.Split(remote, ".")
+	cParts := strings.Split(current, ".")
+	maxLen := len(rParts)
+	if len(cParts) > maxLen {
+		maxLen = len(cParts)
+	}
+	for i := 0; i < maxLen; i++ {
+		var rNum, cNum int
+		if i < len(rParts) {
+			fmt.Sscanf(rParts[i], "%d", &rNum)
+		}
+		if i < len(cParts) {
+			fmt.Sscanf(cParts[i], "%d", &cNum)
+		}
+		if rNum > cNum {
+			return true
+		}
+		if rNum < cNum {
+			return false
+		}
+	}
+	return false
+}
+
 // CheckVersion buat nampilin versi sekarang dan ngecek ada update baru apa engga di GitHub.
 func CheckVersion(currentVersion string) {
 	fmt.Printf("DAP version %s (%s/%s)\n", currentVersion, runtime.GOOS, runtime.GOARCH)
@@ -80,14 +111,11 @@ func CheckVersion(currentVersion string) {
 		return
 	}
 
-	currentClean := strings.TrimPrefix(currentVersion, "v")
-	latestClean := strings.TrimPrefix(release.TagName, "v")
-
-	if currentClean == latestClean {
-		fmt.Println("You are on the latest version.")
-	} else {
+	if isNewerVersion(release.TagName, currentVersion) {
 		fmt.Printf("\nA new version of DAP is available: %s -> %s\n", currentVersion, release.TagName)
 		fmt.Println("Run 'dap --update' to upgrade.")
+	} else {
+		fmt.Println("You are on the latest version.")
 	}
 }
 
@@ -101,10 +129,7 @@ func PerformSelfUpdate(currentVersion string, force bool) error {
 		return fmt.Errorf("failed to fetch release information: %w", err)
 	}
 
-	currentClean := strings.TrimPrefix(currentVersion, "v")
-	latestClean := strings.TrimPrefix(release.TagName, "v")
-
-	if !force && currentClean == latestClean && currentVersion != "dev" {
+	if !force && !isNewerVersion(release.TagName, currentVersion) && currentVersion != "dev" {
 		fmt.Printf("DAP is already up to date (%s).\n", release.TagName)
 		return nil
 	}
