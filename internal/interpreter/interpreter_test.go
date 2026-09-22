@@ -50,29 +50,58 @@ func runEval(t *testing.T, source string) common.Value {
 
 func TestInterpreterArithmetic(t *testing.T) {
 	tests := []struct {
-		name     string
-		source   string
-		expected float64
+		name           string
+		source         string
+		expected       float64
+		expectedIsReal bool
 	}{
 		{
-			name:     "simple addition",
-			source:   "10 + 5",
-			expected: 15,
+			name:           "simple addition",
+			source:         "10 + 5",
+			expected:       15,
+			expectedIsReal: false,
 		},
 		{
-			name:     "multiplication precedence",
-			source:   "2 + 3 * 4",
-			expected: 14,
+			name:           "multiplication precedence",
+			source:         "2 + 3 * 4",
+			expected:       14,
+			expectedIsReal: false,
 		},
 		{
-			name:     "integer division",
-			source:   "14 div 3",
-			expected: 4,
+			name:           "integer division",
+			source:         "14 div 3",
+			expected:       4,
+			expectedIsReal: false,
 		},
 		{
-			name:     "modulo",
-			source:   "14 % 3",
-			expected: 2,
+			name:           "real division with integers",
+			source:         "7 / 2",
+			expected:       3.5,
+			expectedIsReal: true,
+		},
+		{
+			name:           "real division with evenly divisible integers",
+			source:         "4 / 2",
+			expected:       2,
+			expectedIsReal: true,
+		},
+		{
+			name:           "real division mixed int and real",
+			source:         "5 / 2.5",
+			expected:       2,
+			expectedIsReal: true,
+		},
+		{
+			name:           "real division mixed real and int",
+			source:         "7.5 / 3",
+			expected:       2.5,
+			expectedIsReal: true,
+		},
+		{
+			name:           "modulo",
+			source:         "14 % 3",
+			expected:       2,
+			expectedIsReal: false,
 		},
 	}
 
@@ -85,6 +114,9 @@ func TestInterpreterArithmetic(t *testing.T) {
 			}
 			if num.Value != tt.expected {
 				t.Errorf("expected %f, got %f", tt.expected, num.Value)
+			}
+			if num.IsReal != tt.expectedIsReal {
+				t.Errorf("expected IsReal %v, got %v", tt.expectedIsReal, num.IsReal)
 			}
 		})
 	}

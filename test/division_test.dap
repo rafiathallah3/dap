@@ -1,0 +1,27 @@
+program DivisionTest
+dictionary
+    a, b : integer
+    x, y : real
+    r1, r2, r3, r4 : real
+    d1 : integer
+algorithm
+    a <- 7
+    b <- 2
+    x <- 5.0
+    y <- 2.5
+
+    r1 <- a / b
+    write r1
+
+    r2 <- 4 / 2
+    write r2
+
+    r3 <- a / y
+    write r3
+
+    r4 <- x / y
+    write r4
+
+    d1 <- a div b
+    write d1
+endprogram

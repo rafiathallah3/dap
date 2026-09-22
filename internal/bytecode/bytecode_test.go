@@ -133,6 +133,20 @@ algoritma
 endprogram`,
 			expected: "16", // 1 + 3 + 5 + 7 = 16
 		},
+		{
+			name: "Real Division with Integer Operands on VM",
+			source: `program testDiv
+kamus
+    a, b : integer
+    c : real
+algoritma
+    a <- 7
+    b <- 2
+    c <- a / b
+    output(c)
+endprogram`,
+			expected: "3.5",
+		},
 	}
 
 	for _, tc := range testCases {

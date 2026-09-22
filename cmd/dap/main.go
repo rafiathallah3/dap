@@ -16,7 +16,7 @@ import (
 
 var (
 	// Version nyimpen versi aplikasi DAP sekarang.
-	Version = "v1.0.1"
+	Version = "v1.0.2"
 
 	showToken        = false
 	showAST          = false

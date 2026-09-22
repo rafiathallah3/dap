@@ -531,10 +531,6 @@ func (n Number) Multiply(other Value) (Value, *Error) {
 func (n Number) Divide(other Value) (Value, *Error) {
 	switch other := other.(type) {
 	case Number:
-		if !n.IsReal || !other.IsReal {
-			err := RTError(safePos(n.Pos_Start), safePos(other.Pos_End), "Illegal operation: '/' can only be used with real numbers, use 'div' for integer division", n.Context)
-			return nil, &err
-		}
 		if other.Value == 0 {
 			err := RTError(safePos(other.Pos_Start), safePos(other.Pos_End), "Division by zero", n.Context)
 			return other, &err
