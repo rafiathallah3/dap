@@ -20,6 +20,25 @@ func safePos(p *tools.Position) tools.Position {
 // Interpreter buat ngeksekusi node-node AST dari program DAP.
 type Interpreter struct{}
 
+func valueTypeName(v common.Value) string {
+	switch v.(type) {
+	case common.Number:
+		return "number"
+	case common.String:
+		return "string"
+	case common.Boolean:
+		return "boolean"
+	case common.Array:
+		return "array"
+	case common.List:
+		return "list"
+	case common.Struct:
+		return "struct"
+	default:
+		return "unknown"
+	}
+}
+
 // Visit buat ngeksekusi AST node pake static type switch (jauh lebih ngebut daripada reflection).
 func (i *Interpreter) Visit(node common.Expr, context *common.Context) common.Value {
 	if node == nil {
@@ -213,7 +232,11 @@ func (i *Interpreter) VisitVarAssignNode(node common.Expr, context *common.Conte
 	}
 
 	if nodeVarAssignNode.ApakahDeklarasi {
-		baseTypeName, err := i.GetBaseTypeName(nodeVarAssignNode.ValueNode, context)
+		typeTarget := nodeVarAssignNode.ValueNode
+		if nodeVarAssignNode.TypeNode != nil {
+			typeTarget = nodeVarAssignNode.TypeNode
+		}
+		baseTypeName, err := i.GetBaseTypeName(typeTarget, context)
 		if err != nil {
 			return res.Failure(*err)
 		}
@@ -837,11 +860,31 @@ func (i *Interpreter) AssignVariable(varName string, value common.Value, context
 						}
 						return res.Failure(common.RTError(start, end, fmt.Sprintf("Type mismatch: cannot assign real number to integer variable '%s'", varName), context))
 					}
+					num.IsReal = false
+					value = num
+				} else {
+					var start, end tools.Position
+					if posStart != nil {
+						start = *posStart
+					}
+					if posEnd != nil {
+						end = *posEnd
+					}
+					return res.Failure(common.RTError(start, end, fmt.Sprintf("Type mismatch: cannot assign %s to integer variable '%s'", valueTypeName(value), varName), context))
 				}
 			case "real":
 				if num, ok := value.(common.Number); ok {
 					num.IsReal = true
 					value = num
+				} else {
+					var start, end tools.Position
+					if posStart != nil {
+						start = *posStart
+					}
+					if posEnd != nil {
+						end = *posEnd
+					}
+					return res.Failure(common.RTError(start, end, fmt.Sprintf("Type mismatch: cannot assign %s to real variable '%s'", valueTypeName(value), varName), context))
 				}
 			}
 		}
@@ -899,13 +942,15 @@ func (i *Interpreter) VisitArrayTypeNode(node common.Expr, context *common.Conte
 		elements[j] = elemVal
 	}
 
+	elemTypeName, _ := i.GetBaseTypeName(arrayNode.OfType, context)
 	return res.Success(common.Array{
-		Elements:  elements,
-		Start:     start,
-		End:       end,
-		Context:   context,
-		Pos_Start: node.GetPosStart(),
-		Pos_End:   node.GetPosEnd(),
+		Elements:    elements,
+		ElementType: elemTypeName,
+		Start:       start,
+		End:         end,
+		Context:     context,
+		Pos_Start:   node.GetPosStart(),
+		Pos_End:     node.GetPosEnd(),
 	})
 }
 
@@ -993,6 +1038,37 @@ func (i *Interpreter) VisitArrayAssignNode(node common.Expr, context *common.Con
 		return res.Failure(common.RTError(safePos(assignNode.ArrayAccess.Index.GetPosStart()), safePos(assignNode.ArrayAccess.Index.GetPosEnd()), fmt.Sprintf("Index %d out of bounds [%d..%d]", index, array.Start, array.End), context))
 	}
 
+	elemType := array.ElementType
+	if elemType == "" && len(array.Elements) > 0 {
+		if firstNum, ok := array.Elements[0].(common.Number); ok {
+			if firstNum.IsReal {
+				elemType = "real"
+			} else {
+				elemType = "integer"
+			}
+		}
+	}
+
+	switch elemType {
+	case "integer":
+		if numVal, ok := value.(common.Number); ok {
+			if numVal.IsReal || numVal.Value != math.Floor(numVal.Value) {
+				return res.Failure(common.RTError(safePos(assignNode.ValueNode.GetPosStart()), safePos(assignNode.ValueNode.GetPosEnd()), "Type mismatch: cannot assign real number to integer array element", context))
+			}
+			numVal.IsReal = false
+			value = numVal
+		} else {
+			return res.Failure(common.RTError(safePos(assignNode.ValueNode.GetPosStart()), safePos(assignNode.ValueNode.GetPosEnd()), fmt.Sprintf("Type mismatch: cannot assign %s to integer array element", valueTypeName(value)), context))
+		}
+	case "real":
+		if numVal, ok := value.(common.Number); ok {
+			numVal.IsReal = true
+			value = numVal
+		} else {
+			return res.Failure(common.RTError(safePos(assignNode.ValueNode.GetPosStart()), safePos(assignNode.ValueNode.GetPosEnd()), fmt.Sprintf("Type mismatch: cannot assign %s to real array element", valueTypeName(value)), context))
+		}
+	}
+
 	array.Elements[index-array.Start] = value
 	i.writeBack(assignNode.ArrayAccess.Left, array, context)
 	return res.Success(value)
@@ -1044,11 +1120,45 @@ func (i *Interpreter) VisitMemberAssignNode(node common.Expr, context *common.Co
 		return res.Failure(common.RTError(safePos(assignNode.MemberAccess.Object.GetPosStart()), safePos(assignNode.MemberAccess.Object.GetPosEnd()), "Object is not a struct", context))
 	}
 
-	if _, exists := structVal.Fields[assignNode.MemberAccess.MemberTok.Value]; !exists {
-		return res.Failure(common.RTError(safePos(assignNode.MemberAccess.MemberTok.PosStart), safePos(assignNode.MemberAccess.MemberTok.PosEnd), fmt.Sprintf("Field '%s' not found in struct", assignNode.MemberAccess.MemberTok.Value), context))
+	fieldName := assignNode.MemberAccess.MemberTok.Value
+	if _, exists := structVal.Fields[fieldName]; !exists {
+		return res.Failure(common.RTError(safePos(assignNode.MemberAccess.MemberTok.PosStart), safePos(assignNode.MemberAccess.MemberTok.PosEnd), fmt.Sprintf("Field '%s' not found in struct", fieldName), context))
 	}
 
-	structVal.Fields[assignNode.MemberAccess.MemberTok.Value] = value
+	fieldType := structVal.FieldTypes[fieldName]
+	if fieldType == "" {
+		if existingVal, exists := structVal.Fields[fieldName]; exists {
+			if existingNum, ok := existingVal.(common.Number); ok {
+				if existingNum.IsReal {
+					fieldType = "real"
+				} else {
+					fieldType = "integer"
+				}
+			}
+		}
+	}
+
+	switch fieldType {
+	case "integer":
+		if numVal, ok := value.(common.Number); ok {
+			if numVal.IsReal || numVal.Value != math.Floor(numVal.Value) {
+				return res.Failure(common.RTError(safePos(assignNode.ValueNode.GetPosStart()), safePos(assignNode.ValueNode.GetPosEnd()), fmt.Sprintf("Type mismatch: cannot assign real number to integer field '%s'", fieldName), context))
+			}
+			numVal.IsReal = false
+			value = numVal
+		} else {
+			return res.Failure(common.RTError(safePos(assignNode.ValueNode.GetPosStart()), safePos(assignNode.ValueNode.GetPosEnd()), fmt.Sprintf("Type mismatch: cannot assign %s to integer field '%s'", valueTypeName(value), fieldName), context))
+		}
+	case "real":
+		if numVal, ok := value.(common.Number); ok {
+			numVal.IsReal = true
+			value = numVal
+		} else {
+			return res.Failure(common.RTError(safePos(assignNode.ValueNode.GetPosStart()), safePos(assignNode.ValueNode.GetPosEnd()), fmt.Sprintf("Type mismatch: cannot assign %s to real field '%s'", valueTypeName(value), fieldName), context))
+		}
+	}
+
+	structVal.Fields[fieldName] = value
 	i.writeBack(assignNode.MemberAccess.Object, structVal, context)
 	return res.Success(value)
 }
@@ -1166,28 +1276,34 @@ func (i *Interpreter) InitializeType(typeNode common.Expr, context *common.Conte
 			elements[idx] = elemVal
 		}
 
+		elemTypeName, _ := i.GetBaseTypeName(t.OfType, context)
 		return res.Success(common.Array{
-			Elements:  elements,
-			Start:     start,
-			End:       end,
-			Context:   context,
-			Pos_Start: t.Pos_Start,
-			Pos_End:   t.Pos_End,
+			Elements:    elements,
+			ElementType: elemTypeName,
+			Start:       start,
+			End:         end,
+			Context:     context,
+			Pos_Start:   t.Pos_Start,
+			Pos_End:     t.Pos_End,
 		})
 	case common.StructTypeNode:
 		fields := make(map[string]common.Value)
+		fieldTypes := make(map[string]string)
 		for _, field := range t.Fields {
 			fieldVal := res.Register(i.InitializeType(field.ValueNode, context))
 			if res.ShouldReturn() {
 				return res
 			}
 			fields[field.VarName.Value] = fieldVal
+			ft, _ := i.GetBaseTypeName(field.ValueNode, context)
+			fieldTypes[field.VarName.Value] = ft
 		}
 		return res.Success(common.Struct{
-			Fields:    fields,
-			Context:   context,
-			Pos_Start: t.Pos_Start,
-			Pos_End:   t.Pos_End,
+			Fields:     fields,
+			FieldTypes: fieldTypes,
+			Context:    context,
+			Pos_Start:  t.Pos_Start,
+			Pos_End:    t.Pos_End,
 		})
 	}
 

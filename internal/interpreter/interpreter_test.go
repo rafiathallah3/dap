@@ -163,3 +163,146 @@ func TestInterpreterBooleanLogic(t *testing.T) {
 		})
 	}
 }
+
+func runProgram(t *testing.T, source string) (*common.Context, *common.Error) {
+	t.Helper()
+	tokens, err := lexer.Tokenize(source, "test.dap")
+	if err != nil {
+		t.Fatalf("tokenization failed: %v", err)
+	}
+
+	p := parser.NewParser(tokens, false)
+	progName := "<program>"
+	parsed := p.Parse(&progName)
+	pr, ok := parsed.(*common.ParseResult)
+	if !ok {
+		t.Fatalf("expected *common.ParseResult, got %T", parsed)
+	}
+	if pr.Error != nil {
+		t.Fatalf("parser error: %v", pr.Error)
+	}
+
+	st := common.NewSymbolTable(nil)
+	st.Set("null", common.Null{})
+	st.Set("true", common.Boolean{Value: true})
+	st.Set("false", common.Boolean{Value: false})
+	st.Set("integer", common.Number{Value: 0, IsReal: false})
+	st.Set("real", common.Number{Value: 0, IsReal: true})
+	st.Set("string", common.String{Value: ""})
+	st.Set("boolean", common.Boolean{Value: false})
+	st.Set("char", common.String{Value: " "})
+
+	inter := &Interpreter{}
+	ctx := &common.Context{
+		DisplayName: progName,
+		SymbolTable: st,
+	}
+	ctx.Symbol_Table = ctx.SymbolTable
+
+	res := inter.Visit(pr.Node, ctx)
+	if rtRes, ok := res.(*common.RTResult); ok {
+		return ctx, rtRes.Error
+	}
+	return ctx, nil
+}
+
+func TestVariableTypeChecking(t *testing.T) {
+	t.Run("assign real to integer variable returns error", func(t *testing.T) {
+		src := `program Test
+dictionary
+    x : integer
+algorithm
+    x <- 2.5
+endprogram`
+		_, err := runProgram(t, src)
+		if err == nil {
+			t.Fatalf("expected error when assigning real to integer variable, got nil")
+		}
+	})
+
+	t.Run("assign real variable to integer variable returns error", func(t *testing.T) {
+		src := `program Test
+dictionary
+    x : integer
+    y : real
+algorithm
+    y <- 5
+    x <- y
+endprogram`
+		_, err := runProgram(t, src)
+		if err == nil {
+			t.Fatalf("expected error when assigning real variable to integer variable, got nil")
+		}
+	})
+
+	t.Run("assign integer to real variable promotes to real", func(t *testing.T) {
+		src := `program Test
+dictionary
+    y : real
+algorithm
+    y <- 5
+endprogram`
+		ctx, err := runProgram(t, src)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		val := ctx.GetSymbolTable().Get("y")
+		num, ok := val.(common.Number)
+		if !ok {
+			t.Fatalf("expected Number, got %T", val)
+		}
+		if num.Value != 5 || !num.IsReal {
+			t.Errorf("expected 5 with IsReal=true, got %f with IsReal=%v", num.Value, num.IsReal)
+		}
+	})
+
+	t.Run("assign real to real variable works as intended", func(t *testing.T) {
+		src := `program Test
+dictionary
+    y : real
+algorithm
+    y <- 2.5
+endprogram`
+		ctx, err := runProgram(t, src)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		val := ctx.GetSymbolTable().Get("y")
+		num, ok := val.(common.Number)
+		if !ok {
+			t.Fatalf("expected Number, got %T", val)
+		}
+		if num.Value != 2.5 || !num.IsReal {
+			t.Errorf("expected 2.5 with IsReal=true, got %f with IsReal=%v", num.Value, num.IsReal)
+		}
+	})
+
+	t.Run("array element integer and real type checking", func(t *testing.T) {
+		errSrc := `program Test
+dictionary
+    arr : array [1..3] of integer
+algorithm
+    arr[1] <- 3.5
+endprogram`
+		_, err := runProgram(t, errSrc)
+		if err == nil {
+			t.Fatalf("expected error assigning real to integer array element, got nil")
+		}
+
+		okSrc := `program Test
+dictionary
+    arr : array [1..3] of real
+algorithm
+    arr[1] <- 5
+endprogram`
+		ctx, err := runProgram(t, okSrc)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		arrVal := ctx.GetSymbolTable().Get("arr").(common.Array)
+		elem := arrVal.Elements[0].(common.Number)
+		if elem.Value != 5 || !elem.IsReal {
+			t.Errorf("expected array element 5 with IsReal=true, got %f with IsReal=%v", elem.Value, elem.IsReal)
+		}
+	})
+}

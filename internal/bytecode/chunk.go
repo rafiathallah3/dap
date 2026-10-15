@@ -23,6 +23,7 @@ type Chunk struct {
 	Constants    []common.Value
 	Names        []string
 	Functions    map[string]*FunctionChunk
+	VarTypes     map[string]string
 }
 
 // NewChunk creates a new empty bytecode Chunk.
@@ -33,6 +34,7 @@ func NewChunk(name string) *Chunk {
 		Constants:    make([]common.Value, 0),
 		Names:        make([]string, 0),
 		Functions:    make(map[string]*FunctionChunk),
+		VarTypes:     make(map[string]string),
 	}
 }
 

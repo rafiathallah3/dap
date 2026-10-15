@@ -175,12 +175,12 @@ type Null struct {
 	Context *Context
 }
 
-func (n Null) Print() string                                             { return "NULL" }
+func (n Null) Print() string                                                 { return "NULL" }
 func (n Null) SetPos(posStart *tools.Position, posEnd *tools.Position) Value { return n }
-func (n Null) SetContext(ctx *Context) Value                             { n.Context = ctx; return n }
-func (n Null) GetContext() *Context                                      { return n.Context }
-func (n Null) Copy() Value                                               { return Null{Context: n.Context} }
-func (n Null) IsTrue() bool                                              { return false }
+func (n Null) SetContext(ctx *Context) Value                                 { n.Context = ctx; return n }
+func (n Null) GetContext() *Context                                          { return n.Context }
+func (n Null) Copy() Value                                                   { return Null{Context: n.Context} }
+func (n Null) IsTrue() bool                                                  { return false }
 func (n Null) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
 	return n.SetPos(posStart, posEnd)
 }
@@ -217,7 +217,7 @@ func (b Boolean) Copy() Value {
 		Context:   b.Context,
 	}
 }
-func (b Boolean) IsTrue() bool                                              { return b.Value }
+func (b Boolean) IsTrue() bool { return b.Value }
 func (b Boolean) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
 	return b.SetPos(posStart, posEnd)
 }
@@ -277,12 +277,13 @@ func (b Boolean) Ored_by(other Value) (Value, *Error)           { return b.Or(ot
 
 // Array represents a fixed-size indexed array.
 type Array struct {
-	Elements  []Value
-	Start     int
-	End       int
-	Context   *Context
-	Pos_Start *tools.Position
-	Pos_End   *tools.Position
+	Elements    []Value
+	ElementType string
+	Start       int
+	End         int
+	Context     *Context
+	Pos_Start   *tools.Position
+	Pos_End     *tools.Position
 }
 
 func (n Array) Print() string { return PrintValueInterpreter(n) }
@@ -295,15 +296,16 @@ func (n Array) SetContext(ctx *Context) Value { n.Context = ctx; return n }
 func (n Array) GetContext() *Context          { return n.Context }
 func (n Array) Copy() Value {
 	return Array{
-		Elements:  slices.Clone(n.Elements), // Deep slice copy to prevent aliasing
-		Start:     n.Start,
-		End:       n.End,
-		Context:   n.Context,
-		Pos_Start: n.Pos_Start,
-		Pos_End:   n.Pos_End,
+		Elements:    slices.Clone(n.Elements), // Deep slice copy to prevent aliasing
+		ElementType: n.ElementType,
+		Start:       n.Start,
+		End:         n.End,
+		Context:     n.Context,
+		Pos_Start:   n.Pos_Start,
+		Pos_End:     n.Pos_End,
 	}
 }
-func (n Array) IsTrue() bool                                              { return len(n.Elements) != 0 }
+func (n Array) IsTrue() bool { return len(n.Elements) != 0 }
 func (n Array) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
 	return n.SetPos(posStart, posEnd)
 }
@@ -335,7 +337,7 @@ func (n List) Copy() Value {
 		Context:   n.Context,
 	}
 }
-func (n List) IsTrue() bool                                              { return len(n.Elements) != 0 }
+func (n List) IsTrue() bool { return len(n.Elements) != 0 }
 func (n List) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
 	return n.SetPos(posStart, posEnd)
 }
@@ -417,7 +419,7 @@ func (s String) Copy() Value {
 		Context:   s.Context,
 	}
 }
-func (s String) IsTrue() bool                                              { return s.Value != "" }
+func (s String) IsTrue() bool { return s.Value != "" }
 func (s String) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
 	return s.SetPos(posStart, posEnd)
 }
@@ -493,7 +495,7 @@ func (n Number) Copy() Value {
 		Context:   n.Context,
 	}
 }
-func (n Number) IsTrue() bool                                              { return n.Value != 0 }
+func (n Number) IsTrue() bool { return n.Value != 0 }
 func (n Number) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
 	return n.SetPos(posStart, posEnd)
 }
@@ -808,7 +810,7 @@ func (n BaseFunction) Copy() Value {
 		Context:          n.Context,
 	}
 }
-func (n BaseFunction) IsTrue() bool                                              { return true }
+func (n BaseFunction) IsTrue() bool { return true }
 func (n BaseFunction) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
 	return n.SetPos(posStart, posEnd)
 }
@@ -916,7 +918,7 @@ func (n Function) Copy() Value {
 		},
 	}
 }
-func (n Function) IsTrue() bool                                              { return true }
+func (n Function) IsTrue() bool { return true }
 func (n Function) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
 	return n.SetPos(posStart, posEnd)
 }
@@ -993,6 +995,9 @@ var builtinDispatchTable = map[string]BuiltinHandler{
 								errNya := RTError(safePos(posStart), safePos(posEnd), fmt.Sprintf("Type mismatch: cannot assign real number to integer variable '%s'", varName), ctx)
 								return res.Failure(errNya)
 							}
+							isReal = false
+						} else if declaredTypeStr == "real" {
+							isReal = true
 						}
 						ctx.GetSymbolTable().Set(varName, Number{Value: parseFloat, IsReal: isReal, Context: ctx})
 						continue
@@ -1000,6 +1005,10 @@ var builtinDispatchTable = map[string]BuiltinHandler{
 
 					if declaredTypeStr == "integer" {
 						errNya := RTError(safePos(posStart), safePos(posEnd), fmt.Sprintf("Type mismatch: cannot assign string to integer variable '%s'", varName), ctx)
+						return res.Failure(errNya)
+					}
+					if declaredTypeStr == "real" {
+						errNya := RTError(safePos(posStart), safePos(posEnd), fmt.Sprintf("Type mismatch: cannot assign string to real variable '%s'", varName), ctx)
 						return res.Failure(errNya)
 					}
 
@@ -1116,10 +1125,17 @@ var builtinDispatchTable = map[string]BuiltinHandler{
 								errNya := RTError(safePos(posStart), safePos(posEnd), fmt.Sprintf("Type mismatch: cannot assign real number to integer variable '%s'", varName), ctx)
 								return res.Failure(errNya)
 							}
-							ctx.GetSymbolTable().Set(varName, Number{Value: parseFloat, IsReal: isReal, Context: ctx})
+							ctx.GetSymbolTable().Set(varName, Number{Value: parseFloat, IsReal: false, Context: ctx})
 							continue
 						}
 						errNya := RTError(safePos(posStart), safePos(posEnd), fmt.Sprintf("Type mismatch: cannot assign string to integer variable '%s'", varName), ctx)
+						return res.Failure(errNya)
+					} else if declaredTypeStr == "real" {
+						if parseFloat, err := strconv.ParseFloat(line, 64); err == nil {
+							ctx.GetSymbolTable().Set(varName, Number{Value: parseFloat, IsReal: true, Context: ctx})
+							continue
+						}
+						errNya := RTError(safePos(posStart), safePos(posEnd), fmt.Sprintf("Type mismatch: cannot assign string to real variable '%s'", varName), ctx)
 						return res.Failure(errNya)
 					}
 
@@ -1180,7 +1196,7 @@ func (n BuiltInFunction) Copy() Value {
 		},
 	}
 }
-func (n BuiltInFunction) IsTrue() bool                                              { return true }
+func (n BuiltInFunction) IsTrue() bool { return true }
 func (n BuiltInFunction) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
 	return n.SetPos(posStart, posEnd)
 }
@@ -1215,10 +1231,11 @@ func (n BuiltInFunction) Execute(args []Value, rawArgs []Expr) Value {
 
 // Struct represents a structured record with named fields.
 type Struct struct {
-	Fields    map[string]Value
-	Context   *Context
-	Pos_Start *tools.Position
-	Pos_End   *tools.Position
+	Fields     map[string]Value
+	FieldTypes map[string]string
+	Context    *Context
+	Pos_Start  *tools.Position
+	Pos_End    *tools.Position
 }
 
 func (n Struct) Print() string { return PrintValueInterpreter(n) }
@@ -1234,14 +1251,19 @@ func (n Struct) Copy() Value {
 	for k, v := range n.Fields {
 		fieldsCopy[k] = v.Copy()
 	}
+	fieldTypesCopy := make(map[string]string, len(n.FieldTypes))
+	for k, v := range n.FieldTypes {
+		fieldTypesCopy[k] = v
+	}
 	return Struct{
-		Fields:    fieldsCopy,
-		Context:   n.Context,
-		Pos_Start: n.Pos_Start,
-		Pos_End:   n.Pos_End,
+		Fields:     fieldsCopy,
+		FieldTypes: fieldTypesCopy,
+		Context:    n.Context,
+		Pos_Start:  n.Pos_Start,
+		Pos_End:    n.Pos_End,
 	}
 }
-func (n Struct) IsTrue() bool                                              { return true }
+func (n Struct) IsTrue() bool { return true }
 func (n Struct) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
 	return n.SetPos(posStart, posEnd)
 }
@@ -1273,7 +1295,7 @@ func (n Type) Copy() Value {
 		Pos_End:    n.Pos_End,
 	}
 }
-func (n Type) IsTrue() bool                                              { return true }
+func (n Type) IsTrue() bool { return true }
 func (n Type) Set_pos(posStart *tools.Position, posEnd *tools.Position) Value {
 	return n.SetPos(posStart, posEnd)
 }

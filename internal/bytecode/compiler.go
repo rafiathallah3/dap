@@ -55,6 +55,18 @@ func (c *Compiler) compileNode(node common.Expr) error {
 				return err
 			}
 		}
+	case common.DictionaryNode:
+		for _, decl := range n.VariableDiBuat {
+			if assign, ok := decl.(common.VarAssignNode); ok {
+				typeTarget := assign.ValueNode
+				if assign.TypeNode != nil {
+					typeTarget = assign.TypeNode
+				}
+				if typeAccess, ok := typeTarget.(common.VarAccessNode); ok {
+					c.chunk.VarTypes[assign.VarName.Value] = typeAccess.VarNameTok.Value
+				}
+			}
+		}
 		return nil
 
 	case common.NumberNode:

@@ -89,9 +89,9 @@ type TypeAliasNode struct {
 	Pos_End    *tools.Position
 }
 
-func (n TypeAliasNode) expr()                     {}
-func (n TypeAliasNode) Print() string             { return PrintValueAST(n) }
-func (n TypeAliasNode) Name() string              { return "TypeAliasNode" }
+func (n TypeAliasNode) expr()                        {}
+func (n TypeAliasNode) Print() string                { return PrintValueAST(n) }
+func (n TypeAliasNode) Name() string                 { return "TypeAliasNode" }
 func (n TypeAliasNode) GetPosStart() *tools.Position { return n.Pos_Start }
 func (n TypeAliasNode) GetPosEnd() *tools.Position   { return n.Pos_End }
 
@@ -102,9 +102,9 @@ type StructTypeNode struct {
 	Pos_End    *tools.Position
 }
 
-func (n StructTypeNode) expr()                     {}
-func (n StructTypeNode) Print() string             { return PrintValueAST(n) }
-func (n StructTypeNode) Name() string              { return "StructTypeNode" }
+func (n StructTypeNode) expr()                        {}
+func (n StructTypeNode) Print() string                { return PrintValueAST(n) }
+func (n StructTypeNode) Name() string                 { return "StructTypeNode" }
 func (n StructTypeNode) GetPosStart() *tools.Position { return n.Pos_Start }
 func (n StructTypeNode) GetPosEnd() *tools.Position   { return n.Pos_End }
 
@@ -115,9 +115,9 @@ type MemberAccessNode struct {
 	Pos_End   *tools.Position
 }
 
-func (n MemberAccessNode) expr()                     {}
-func (n MemberAccessNode) Print() string             { return PrintValueAST(n) }
-func (n MemberAccessNode) Name() string              { return "MemberAccessNode" }
+func (n MemberAccessNode) expr()                        {}
+func (n MemberAccessNode) Print() string                { return PrintValueAST(n) }
+func (n MemberAccessNode) Name() string                 { return "MemberAccessNode" }
 func (n MemberAccessNode) GetPosStart() *tools.Position { return n.Pos_Start }
 func (n MemberAccessNode) GetPosEnd() *tools.Position   { return n.Pos_End }
 
@@ -128,9 +128,9 @@ type MemberAssignNode struct {
 	Pos_End      *tools.Position
 }
 
-func (n MemberAssignNode) expr()                     {}
-func (n MemberAssignNode) Print() string             { return PrintValueAST(n) }
-func (n MemberAssignNode) Name() string              { return "MemberAssignNode" }
+func (n MemberAssignNode) expr()                        {}
+func (n MemberAssignNode) Print() string                { return PrintValueAST(n) }
+func (n MemberAssignNode) Name() string                 { return "MemberAssignNode" }
 func (n MemberAssignNode) GetPosStart() *tools.Position { return n.Pos_Start }
 func (n MemberAssignNode) GetPosEnd() *tools.Position   { return n.Pos_End }
 
@@ -140,9 +140,9 @@ type NumberNode struct {
 	Pos_End   *tools.Position
 }
 
-func (n NumberNode) expr()                     {}
-func (n NumberNode) Print() string             { return PrintValueAST(n) }
-func (n NumberNode) Name() string              { return "NumberNode" }
+func (n NumberNode) expr()                        {}
+func (n NumberNode) Print() string                { return PrintValueAST(n) }
+func (n NumberNode) Name() string                 { return "NumberNode" }
 func (n NumberNode) GetPosStart() *tools.Position { return n.Pos_Start }
 func (n NumberNode) GetPosEnd() *tools.Position   { return n.Pos_End }
 
@@ -152,9 +152,9 @@ type StringNode struct {
 	Pos_End   *tools.Position
 }
 
-func (n StringNode) expr()                     {}
-func (n StringNode) Print() string             { return PrintValueAST(n) }
-func (n StringNode) Name() string              { return "StringNode" }
+func (n StringNode) expr()                        {}
+func (n StringNode) Print() string                { return PrintValueAST(n) }
+func (n StringNode) Name() string                 { return "StringNode" }
 func (n StringNode) GetPosStart() *tools.Position { return n.Pos_Start }
 func (n StringNode) GetPosEnd() *tools.Position   { return n.Pos_End }
 
@@ -164,9 +164,9 @@ type ListNode struct {
 	Pos_End     *tools.Position
 }
 
-func (n ListNode) expr()                     {}
-func (n ListNode) Print() string             { return PrintValueAST(n) }
-func (n ListNode) Name() string              { return "ListNode" }
+func (n ListNode) expr()                        {}
+func (n ListNode) Print() string                { return PrintValueAST(n) }
+func (n ListNode) Name() string                 { return "ListNode" }
 func (n ListNode) GetPosStart() *tools.Position { return n.Pos_Start }
 func (n ListNode) GetPosEnd() *tools.Position   { return n.Pos_End }
 
@@ -176,9 +176,9 @@ type NullNode struct {
 	Pos_End   *tools.Position
 }
 
-func (n NullNode) expr()                     {}
-func (n NullNode) Print() string             { return PrintValueAST(n) }
-func (n NullNode) Name() string              { return "NullNode" }
+func (n NullNode) expr()                        {}
+func (n NullNode) Print() string                { return PrintValueAST(n) }
+func (n NullNode) Name() string                 { return "NullNode" }
 func (n NullNode) GetPosStart() *tools.Position { return n.Pos_Start }
 func (n NullNode) GetPosEnd() *tools.Position   { return n.Pos_End }
 
@@ -190,9 +190,9 @@ type BinOpNode struct {
 	Pos_End   *tools.Position
 }
 
-func (n BinOpNode) expr()                     {}
-func (n BinOpNode) Print() string             { return PrintValueAST(n) }
-func (n BinOpNode) Name() string              { return "BinOpNode" }
+func (n BinOpNode) expr()                        {}
+func (n BinOpNode) Print() string                { return PrintValueAST(n) }
+func (n BinOpNode) Name() string                 { return "BinOpNode" }
 func (n BinOpNode) GetPosStart() *tools.Position { return n.Pos_Start }
 func (n BinOpNode) GetPosEnd() *tools.Position   { return n.Pos_End }
 
@@ -203,15 +203,16 @@ type UnaryOpNode struct {
 	Pos_End   *tools.Position
 }
 
-func (n UnaryOpNode) expr()                     {}
-func (n UnaryOpNode) Print() string             { return PrintValueAST(n) }
-func (n UnaryOpNode) Name() string              { return "UnaryOpNode" }
+func (n UnaryOpNode) expr()                        {}
+func (n UnaryOpNode) Print() string                { return PrintValueAST(n) }
+func (n UnaryOpNode) Name() string                 { return "UnaryOpNode" }
 func (n UnaryOpNode) GetPosStart() *tools.Position { return n.Pos_Start }
 func (n UnaryOpNode) GetPosEnd() *tools.Position   { return n.Pos_End }
 
 type VarAssignNode struct {
 	VarName         lexer.Token
 	ValueNode       Expr
+	TypeNode        Expr
 	ApakahConst     bool
 	ApakahDeklarasi bool
 	Pos_Start       *tools.Position
@@ -241,9 +242,9 @@ type VarAccessNode struct {
 	Pos_end    *tools.Position
 }
 
-func (n VarAccessNode) expr()                     {}
-func (n VarAccessNode) Print() string             { return PrintValueAST(n) }
-func (n VarAccessNode) Name() string              { return "VarAccessToken" }
+func (n VarAccessNode) expr()                        {}
+func (n VarAccessNode) Print() string                { return PrintValueAST(n) }
+func (n VarAccessNode) Name() string                 { return "VarAccessToken" }
 func (n VarAccessNode) GetPosStart() *tools.Position { return n.Pos_Start }
 func (n VarAccessNode) GetPosEnd() *tools.Position   { return n.Pos_end }
 
@@ -257,9 +258,9 @@ type ElseCase struct {
 	ShouldReturnNull bool
 }
 
-func (n ElseCase) expr()                     {}
-func (n ElseCase) Print() string             { return PrintValueAST(n) }
-func (n ElseCase) Name() string              { return "ElseCase" }
+func (n ElseCase) expr()                        {}
+func (n ElseCase) Print() string                { return PrintValueAST(n) }
+func (n ElseCase) Name() string                 { return "ElseCase" }
 func (n ElseCase) GetPosStart() *tools.Position { return n.Isi.GetPosStart() }
 func (n ElseCase) GetPosEnd() *tools.Position   { return n.Isi.GetPosEnd() }
 
@@ -301,9 +302,9 @@ type ForNode struct {
 	Pos_end          *tools.Position
 }
 
-func (n ForNode) expr()                     {}
-func (n ForNode) Print() string             { return PrintValueAST(n) }
-func (n ForNode) Name() string              { return "ForNode" }
+func (n ForNode) expr()                        {}
+func (n ForNode) Print() string                { return PrintValueAST(n) }
+func (n ForNode) Name() string                 { return "ForNode" }
 func (n ForNode) GetPosStart() *tools.Position { return n.Pos_Start }
 func (n ForNode) GetPosEnd() *tools.Position   { return n.Pos_end }
 
@@ -315,9 +316,9 @@ type WhileNode struct {
 	Pos_end          *tools.Position
 }
 
-func (n WhileNode) expr()                     {}
-func (n WhileNode) Print() string             { return PrintValueAST(n) }
-func (n WhileNode) Name() string              { return "WhileNode" }
+func (n WhileNode) expr()                        {}
+func (n WhileNode) Print() string                { return PrintValueAST(n) }
+func (n WhileNode) Name() string                 { return "WhileNode" }
 func (n WhileNode) GetPosStart() *tools.Position { return n.Pos_Start }
 func (n WhileNode) GetPosEnd() *tools.Position   { return n.Pos_end }
 
@@ -329,9 +330,9 @@ type RepeatNode struct {
 	Pos_end          *tools.Position
 }
 
-func (n RepeatNode) expr()                     {}
-func (n RepeatNode) Print() string             { return PrintValueAST(n) }
-func (n RepeatNode) Name() string              { return "RepeatNode" }
+func (n RepeatNode) expr()                        {}
+func (n RepeatNode) Print() string                { return PrintValueAST(n) }
+func (n RepeatNode) Name() string                 { return "RepeatNode" }
 func (n RepeatNode) GetPosStart() *tools.Position { return n.Pos_Start }
 func (n RepeatNode) GetPosEnd() *tools.Position   { return n.Pos_end }
 
@@ -407,9 +408,9 @@ type ContinueNode struct {
 	Pos_end   *tools.Position
 }
 
-func (n ContinueNode) expr()                     {}
-func (n ContinueNode) Print() string             { return PrintValueAST(n) }
-func (n ContinueNode) Name() string              { return "ContinueNode" }
+func (n ContinueNode) expr()                        {}
+func (n ContinueNode) Print() string                { return PrintValueAST(n) }
+func (n ContinueNode) Name() string                 { return "ContinueNode" }
 func (n ContinueNode) GetPosStart() *tools.Position { return n.Pos_Start }
 func (n ContinueNode) GetPosEnd() *tools.Position   { return n.Pos_end }
 
@@ -418,9 +419,9 @@ type BreakNode struct {
 	Pos_end   *tools.Position
 }
 
-func (n BreakNode) expr()                     {}
-func (n BreakNode) Print() string             { return PrintValueAST(n) }
-func (n BreakNode) Name() string              { return "BreakNode" }
+func (n BreakNode) expr()                        {}
+func (n BreakNode) Print() string                { return PrintValueAST(n) }
+func (n BreakNode) Name() string                 { return "BreakNode" }
 func (n BreakNode) GetPosStart() *tools.Position { return n.Pos_Start }
 func (n BreakNode) GetPosEnd() *tools.Position   { return n.Pos_end }
 
@@ -454,9 +455,9 @@ type ArrayTypeNode struct {
 	Pos_End   *tools.Position
 }
 
-func (n ArrayTypeNode) expr()                     {}
-func (n ArrayTypeNode) Print() string             { return PrintValueAST(n) }
-func (n ArrayTypeNode) Name() string              { return "ArrayTypeNode" }
+func (n ArrayTypeNode) expr()                        {}
+func (n ArrayTypeNode) Print() string                { return PrintValueAST(n) }
+func (n ArrayTypeNode) Name() string                 { return "ArrayTypeNode" }
 func (n ArrayTypeNode) GetPosStart() *tools.Position { return n.Pos_Start }
 func (n ArrayTypeNode) GetPosEnd() *tools.Position   { return n.Pos_End }
 
@@ -467,9 +468,9 @@ type ArrayIndexNode struct {
 	Pos_End   *tools.Position
 }
 
-func (n ArrayIndexNode) expr()                     {}
-func (n ArrayIndexNode) Print() string             { return PrintValueAST(n) }
-func (n ArrayIndexNode) Name() string              { return "ArrayIndexNode" }
+func (n ArrayIndexNode) expr()                        {}
+func (n ArrayIndexNode) Print() string                { return PrintValueAST(n) }
+func (n ArrayIndexNode) Name() string                 { return "ArrayIndexNode" }
 func (n ArrayIndexNode) GetPosStart() *tools.Position { return n.Pos_Start }
 func (n ArrayIndexNode) GetPosEnd() *tools.Position   { return n.Pos_End }
 
@@ -480,9 +481,9 @@ type ArrayAssignNode struct {
 	Pos_End     *tools.Position
 }
 
-func (n ArrayAssignNode) expr()                     {}
-func (n ArrayAssignNode) Print() string             { return PrintValueAST(n) }
-func (n ArrayAssignNode) Name() string              { return "ArrayAssignNode" }
+func (n ArrayAssignNode) expr()                        {}
+func (n ArrayAssignNode) Print() string                { return PrintValueAST(n) }
+func (n ArrayAssignNode) Name() string                 { return "ArrayAssignNode" }
 func (n ArrayAssignNode) GetPosStart() *tools.Position { return n.Pos_Start }
 func (n ArrayAssignNode) GetPosEnd() *tools.Position   { return n.Pos_End }
 
@@ -499,8 +500,8 @@ type DependNode struct {
 	Pos_End     *tools.Position
 }
 
-func (n DependNode) expr()                     {}
-func (n DependNode) Print() string             { return PrintValueAST(n) }
-func (n DependNode) Name() string              { return "DependNode" }
+func (n DependNode) expr()                        {}
+func (n DependNode) Print() string                { return PrintValueAST(n) }
+func (n DependNode) Name() string                 { return "DependNode" }
 func (n DependNode) GetPosStart() *tools.Position { return n.Pos_Start }
 func (n DependNode) GetPosEnd() *tools.Position   { return n.Pos_End }

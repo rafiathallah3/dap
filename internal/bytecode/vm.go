@@ -90,6 +90,27 @@ func (vm *VM) Run(c *Chunk) error {
 		case OP_STORE:
 			name := c.Names[inst.Arg]
 			val := vm.Pop()
+			if expectedType, ok := c.VarTypes[name]; ok {
+				switch expectedType {
+				case "integer":
+					if num, ok := val.(common.Number); ok {
+						if num.IsReal || num.Value != math.Floor(num.Value) {
+							return fmt.Errorf("line %d: Type mismatch: cannot assign real number to integer variable '%s'", inst.Line, name)
+						}
+						num.IsReal = false
+						val = num
+					} else {
+						return fmt.Errorf("line %d: Type mismatch: cannot assign non-number to integer variable '%s'", inst.Line, name)
+					}
+				case "real":
+					if num, ok := val.(common.Number); ok {
+						num.IsReal = true
+						val = num
+					} else {
+						return fmt.Errorf("line %d: Type mismatch: cannot assign non-number to real variable '%s'", inst.Line, name)
+					}
+				}
+			}
 			vm.globals[name] = val
 
 		case OP_ADD:

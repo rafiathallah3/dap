@@ -147,6 +147,28 @@ algoritma
 endprogram`,
 			expected: "3.5",
 		},
+		{
+			name: "Assigning Integer to Real Variable Promotes to Real on VM",
+			source: `program testRealPromote
+kamus
+    r : real
+algoritma
+    r <- 5
+    output(r)
+endprogram`,
+			expected: "5.0",
+		},
+		{
+			name: "Assigning Real to Real Variable on VM",
+			source: `program testRealAssign
+kamus
+    r : real
+algoritma
+    r <- 3.14
+    output(r)
+endprogram`,
+			expected: "3.14",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -174,5 +196,27 @@ endprogram`,
 				t.Errorf("Output mismatch. Expected %q, got %q", tc.expected, got)
 			}
 		})
+	}
+}
+
+func TestBytecodeVMTypeMismatch(t *testing.T) {
+	source := `program testIntMismatch
+kamus
+    x : integer
+algoritma
+    x <- 3.14
+endprogram`
+	ast := parseDAP(source)
+	chunk, err := bytecode.Compile(ast)
+	if err != nil {
+		t.Fatalf("Compile error: %v", err)
+	}
+	vm := bytecode.NewVM()
+	err = vm.Run(chunk)
+	if err == nil {
+		t.Fatalf("Expected runtime error when assigning real to integer variable in VM, got nil")
+	}
+	if !strings.Contains(err.Error(), "Type mismatch") {
+		t.Errorf("Expected 'Type mismatch' error, got %v", err)
 	}
 }

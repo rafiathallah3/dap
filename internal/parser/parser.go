@@ -267,11 +267,12 @@ func (p *parser) parseDictionary() common.Expr {
 			res.RegisterAdvancement()
 			p.advance()
 
+			var constType common.Expr
 			if p.currentToken().Kind == lexer.COLON {
 				res.RegisterAdvancement()
 				p.advance()
 
-				res.Register(p.parseType())
+				constType = res.Register(p.parseType())
 				if res.Error != nil {
 					return res
 				}
@@ -291,11 +292,13 @@ func (p *parser) parseDictionary() common.Expr {
 			}
 
 			isiNode = append(isiNode, common.VarAssignNode{
-				VarName:     varName,
-				ValueNode:   expr,
-				ApakahConst: true,
-				Pos_Start:   varName.PosStart,
-				Pos_end:     varName.PosEnd,
+				VarName:         varName,
+				ValueNode:       expr,
+				TypeNode:        constType,
+				ApakahConst:     true,
+				ApakahDeklarasi: constType != nil,
+				Pos_Start:       varName.PosStart,
+				Pos_end:         varName.PosEnd,
 			})
 		} else if p.currentToken().Kind == lexer.TYPE {
 			res.RegisterAdvancement()
